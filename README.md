@@ -4,11 +4,35 @@ Free, open-source instruments for **synthwave and drum and bass**: neon pads and
 wobble basses and 80s gated-reverb breaks. Two synthesizers and a drum machine, written in Rust with
 [nih-plug](https://github.com/robbert-vdh/nih-plug). Each builds as **VST3**, **CLAP** and a **standalone** app.
 
-| Plugin | What it is |
-|---|---|
-| **Remedy** (`plugins/remedy`) | Wavetable synthesizer with unison, warp modes, a modulation matrix and an effects rack |
-| **Wub Machine** (`plugins/wubmachine`) | Monophonic wobble-bass synth for dubstep and drum and bass |
-| **Neon Break** (`plugins/neonbreak`) | Synthesized 80s drum machine with gated reverb, drum and bass patterns, fills and a half-time switch (see below) |
+## The plugins
+
+### Remedy: wavetable synthesizer
+
+![Remedy](images/remedy.png)
+
+A polyphonic wavetable synth for pads, leads and plucks. Two oscillators scan through procedurally
+generated wavetables, with up to 16 voices of unison, 11 warp modes, a sub oscillator and noise. The sound
+goes through a multi-mode filter, three envelopes, four LFOs and a modulation matrix, then an effects
+rack (distortion, chorus, delay, reverb). Source: `plugins/remedy`.
+
+### Wub Machine: wobble bass
+
+![Wub Machine](images/wubmachine.png)
+
+A monophonic bass synth built for dubstep and drum and bass. A unison saw oscillator (plus an FM-capable
+second oscillator and a sub) feeds a resonant ladder filter that a tempo-synced LFO opens and closes: that
+is the "wub", and a second LFO adds the growl. Vowel-style formant filtering, two distortion stages and an
+OTT-style multiband compressor add bite. A 16-step pattern gives every step its own wobble depth, speed
+and pitch, and 40 factory presets cover the common wobble, Reese and growl sounds. Source: `plugins/wubmachine`.
+
+### Neon Break: drum machine
+
+![Neon Break](images/neonbreak.png)
+
+An 80s-style drum machine for synthwave and drum and bass, played entirely from the piano roll: drum
+notes, fill keys and twelve pattern slots. Eight synthesized drums can each be replaced or layered with
+your own samples (WAV, Ogg Vorbis or WavPack, loaded by click or drag and drop). It has a gated reverb, a
+drum bus and a separate kick output for sidechaining. Details are further down. Source: `plugins/neonbreak`.
 
 ## Layout
 
