@@ -1,0 +1,79 @@
+name: Build and release
+
+# Runs when a commit lands on main (a merged PR or a direct push) and when a version tag is pushed.
+#  - Every run builds all three plugins on Windows, macOS and Linux and keeps the zips as artifacts.
+#  - A tag that starts with "v" (for example v0.1.0) also publishes a GitHub Release with the zips.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, python: python }
+          - { name: macos, os: macos-latest, python: python3 }
+          - { name: linux, os: ubuntu-latest, python: python3 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libgl-dev libjack-jackd2-dev libx11-xcb-dev \
+            libxcb1-dev libxcb-dri2-0-dev libxcb-icccm4-dev libxcb-randr0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libgtk-3-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --release --workspace --lib
+
+      - name: Bundle the plugins
+        run: cargo xtask bundle remedy wubmachine neonbreak --release
+
+      - name: Zip the bundles
+        shell: bash
+        run: |
+          cp LICENSE target/bundled/LICENSE
+          cd target/bundled
+          ${{ matrix.python }} -m zipfile -c "../../hodiloves-instruments-${{ matrix.name }}.zip" *
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hodiloves-instruments-${{ matrix.name }}
+          path: hodiloves-instruments-${{ matrix.name }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
