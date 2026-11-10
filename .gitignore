@@ -1,0 +1,16 @@
+# Build output
+target/
+
+# Local tooling and scratch files
+.claude/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Audio and bundles produced while testing
+*.vst3
+*.clap

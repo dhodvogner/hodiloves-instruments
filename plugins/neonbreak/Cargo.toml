@@ -1,0 +1,22 @@
+[package]
+name = "neonbreak"
+version = "0.1.0"
+edition = "2021"
+authors = ["Hodiloves"]
+license = "GPL-3.0-or-later"
+description = "Neon Break - a synthesized 80s drum machine with drum and bass patterns (VST3 / CLAP)"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "neonbreak-standalone"
+path = "src/main.rs"
+
+[dependencies]
+nih_plug = { workspace = true, features = ["vst3", "standalone"] }
+nih_plug_egui = { workspace = true }
+plugin_common = { workspace = true }
+serde_json = "1"
+lewton = "0.10"
+wavicle = "0.1"

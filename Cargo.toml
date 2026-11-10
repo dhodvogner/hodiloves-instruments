@@ -1,0 +1,28 @@
+# Workspace for all plugins in this folder.
+#   plugins/remedy      - Remedy wavetable synthesizer
+#   plugins/wubmachine  - Wub Machine wobble-bass synthesizer
+#   plugins/neonbreak   - Neon Break drum machine
+#   crates/common      - shared DSP helpers and egui widgets
+#   xtask               - `cargo xtask bundle <plugin> --release`
+
+[workspace]
+resolver = "2"
+members = ["plugins/remedy", "plugins/wubmachine", "plugins/neonbreak", "crates/common", "xtask"]
+
+[workspace.dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+plugin_common = { path = "crates/common" }
+
+# egui-baseview with file drag-and-drop forwarded to egui (see vendor/egui-baseview/src/window.rs).
+[patch."https://github.com/BillyDM/egui-baseview.git"]
+egui-baseview = { path = "vendor/egui-baseview" }
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"
