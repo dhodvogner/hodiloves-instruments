@@ -44,8 +44,14 @@ jobs:
       - name: Run tests
         run: cargo test --release --workspace --lib
 
-      - name: Bundle the plugins
-        run: cargo xtask bundle remedy wubmachine neonbreak --release
+      - name: Bundle Remedy
+        run: cargo xtask bundle remedy --release
+
+      - name: Bundle Wub Machine
+        run: cargo xtask bundle wubmachine --release
+
+      - name: Bundle Neon Break
+        run: cargo xtask bundle neonbreak --release
 
       - name: Zip the bundles
         shell: bash
