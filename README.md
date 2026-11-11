@@ -83,23 +83,7 @@ Run a plugin without a DAW (opens the UI and uses WASAPI audio/MIDI):
 cargo run --release --bin wubmachine-standalone
 ```
 
-## Releases
-
-GitHub Actions (`.github/workflows/release.yml`) builds and tests all three plugins for Windows, macOS
-and Linux every time a commit lands on `main`. To publish a release, tag the commit and push the tag:
-
-```bash
-git tag v0.1.0
-```
-
-```bash
-git push origin v0.1.0
-```
-
-The workflow then attaches one zip per operating system (VST3, CLAP and standalone app) to a new GitHub
-Release for that tag.
-
-## Installing the VST3 (FL Studio and others)
+## Installing the VST3 (FL Studio and others) on Windows
 
 Copy the whole `.vst3` **folder** into `C:\Program Files\Common Files\VST3\` (needs administrator rights),
 then rescan in your DAW. In FL Studio use *Options > Manage plugins > Find installed plugins*.
@@ -109,6 +93,8 @@ search path is of type **VST3**, not VST.
 ```powershell
 Copy-Item -Recurse -Force "target\bundled\Wub Machine.vst3" "C:\Program Files\Common Files\VST3\"
 ```
+
+**Linux/MacOS versions are untested!**
 
 ## Neon Break in short
 
