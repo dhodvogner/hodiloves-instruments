@@ -1,0 +1,21 @@
+[package]
+name = "chordwave"
+version = "0.1.0"
+edition = "2021"
+authors = ["Hodiloves"]
+license = "GPL-3.0-or-later"
+description = "Chordwave - chord, bassline and melody sketching tool with theory-aware suggestions and MIDI export (VST3 / CLAP)"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "chordwave-standalone"
+path = "src/main.rs"
+
+[dependencies]
+nih_plug = { workspace = true, features = ["vst3", "standalone"] }
+nih_plug_egui = { workspace = true }
+plugin_common = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
