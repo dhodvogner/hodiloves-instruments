@@ -1,7 +1,7 @@
 name: Build and release
 
 # Runs when a commit lands on main (a merged PR or a direct push) and when a version tag is pushed.
-#  - Every run builds all three plugins on Windows, macOS and Linux and keeps the zips as artifacts.
+#  - Every run builds all four plugins on Windows, macOS and Linux and keeps the zips as artifacts.
 #  - A tag that starts with "v" (for example v0.1.0) also publishes a GitHub Release with the zips.
 on:
   push:
@@ -52,6 +52,9 @@ jobs:
 
       - name: Bundle Neon Break
         run: cargo xtask bundle neonbreak --release
+
+      - name: Bundle Chordwave
+        run: cargo xtask bundle chordwave --release
 
       - name: Zip the bundles
         shell: bash

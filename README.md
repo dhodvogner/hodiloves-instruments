@@ -1,8 +1,9 @@
 # Hodiloves Instruments
 
 Free, open-source instruments for **synthwave and drum and bass**: neon pads and wavetables, rolling
-wobble basses and 80s gated-reverb breaks. Two synthesizers and a drum machine, written in Rust with
-[nih-plug](https://github.com/robbert-vdh/nih-plug). Each builds as **VST3**, **CLAP** and a **standalone** app.
+wobble basses, 80s gated-reverb breaks and a chord and melody sketcher. Two synthesizers, a drum machine
+and a songwriting tool, written in Rust with [nih-plug](https://github.com/robbert-vdh/nih-plug). Each
+builds as **VST3**, **CLAP** and a **standalone** app.
 
 ## The plugins
 
@@ -34,6 +35,17 @@ notes, fill keys and twelve pattern slots. Eight synthesized drums can each be r
 your own samples (WAV, Ogg Vorbis or WavPack, loaded by click or drag and drop). It has a gated reverb, a
 drum bus and a separate kick output for sidechaining. Details are further down. Source: `plugins/neonbreak`.
 
+### Chordwave: chord, bass and melody sketcher
+
+![Chordwave](images/chordwave.png)
+
+A songwriting helper in the spirit of chord-palette tools. Pick a key and scale and Chordwave shows only
+the chords that belong there, colour-coded and explained. Build a progression by dragging chords into a
+sequence, let the suggestion engine tell you what could come next **and why**, generate a bassline and a
+melody that follow the chords, then get it all into your DAW as a MIDI file (or as live MIDI). Details are
+further down, the music theory behind it is in [`plugins/chordwave/THEORY.md`](plugins/chordwave/THEORY.md).
+Source: `plugins/chordwave`.
+
 ## Layout
 
 ```
@@ -42,6 +54,7 @@ bundler.toml          display names of the bundles
 plugins/remedy        Remedy
 plugins/wubmachine    Wub Machine
 plugins/neonbreak     Neon Break
+plugins/chordwave     Chordwave
 crates/common         shared code: DSP helpers (envelope, decimator, tanh...) and egui widgets (knob, combo...)
 xtask                 `cargo xtask bundle <plugin> --release`
 ```
@@ -65,11 +78,15 @@ cargo xtask bundle wubmachine --release
 cargo xtask bundle neonbreak --release
 ```
 
+```bash
+cargo xtask bundle chordwave --release
+```
+
 Output goes to `target/bundled/`:
 
-- `Remedy.vst3`, `Wub Machine.vst3`, `Neon Break.vst3` (a folder: `Name.vst3\Contents\x86_64-win\Name.vst3`)
-- `Remedy.clap`, `Wub Machine.clap`, `Neon Break.clap`
-- `Remedy.exe`, `Wub Machine.exe`, `Neon Break.exe` (standalone apps)
+- `Remedy.vst3`, `Wub Machine.vst3`, `Neon Break.vst3`, `Chordwave.vst3` (a folder: `Name.vst3\Contents\x86_64-win\Name.vst3`)
+- `Remedy.clap`, `Wub Machine.clap`, `Neon Break.clap`, `Chordwave.clap`
+- `Remedy.exe`, `Wub Machine.exe`, `Neon Break.exe`, `Chordwave.exe` (standalone apps)
 
 Run tests:
 
@@ -117,6 +134,49 @@ Everything is played from the piano roll. Note names below are FL Studio's (MIDI
 - **Kick output**: a second stereo output carries only the kick, for sidechaining (KICK OUT in the drum
   bus panel: in mix, mix + copy, or separate). In FL Studio enable it in the wrapper's Processing tab.
 - **Gated reverb** with a tempo-synced gate, and a **drum bus** with punch, drive, glue and kick ducking.
+
+## Chordwave in short
+
+Chordwave is a sketchpad, not a sound source: it writes the notes (chords, bass, melody) and helps you
+get them into the instruments you already use. It has a small built-in synth so you can hear ideas
+immediately.
+
+**Workflow**: choose key, scale and genre, then
+
+1. **Palette**: every chord of the key as a grid (triads, 7ths, 9ths, sus2, sus4, add9). Green is major-ish,
+   purple is minor-ish, grey is everything else (sus, diminished, augmented). A filled dot means the chord is
+   fully inside the key, a hollow dot means it borrows a note. Click to listen, double-click to add, or drag
+   it onto the sequence. *Adjacent keys* steps along the circle of fifths (more steps = more exotic chords),
+   *Parallel mode* borrows from another mode on the same tonic (modal interchange).
+2. **Ideas**: *Next chord* ranks what could follow the selected chord and gives the music-theory reason
+   (root motion, notes in common, tension and release, typical moves of the chosen genre). *Match melody*
+   lists the chords that fit your melody notes, guesses the key, and can re-harmonise the whole sketch around
+   a melody. *Progressions* has ready-made loops for synthwave, drum and bass, liquid, pop, cinematic, lo-fi and
+   trance, written in your key, each with an explanation of why it works.
+3. **Sequence**: chords as blocks in sections (verse, chorus...). Drag to reorder, drag the right edge to change
+   the length, set the inversion (or let it pick the smoothest voice leading) and a slash bass note. Duplicate
+   a section to repeat it. The melody moves with the chords when you insert, delete or resize them.
+4. **Piano roll**: draw the melody on top of the harmony. Scale notes are lit, the chord tones of the chord
+   under each note glow, and every note is coloured: chord tone, scale tone or outside the scale. **Generate**
+   writes a hook with chord tones on the strong beats, stepwise motion in between, a repeating rhythm and a
+   resolving end (density and register are adjustable); *Snap to key* fixes stray notes.
+5. **Parts**: the chords can be played as held pads, 8th pulses, offbeat or syncopated stabs, gated 16ths or
+   arpeggios; the bass as sustained roots, driving 8ths, octave bounce, offbeat roots or drum and bass
+   two-step and rolling patterns. Picking a genre sets sensible defaults, nothing is locked.
+
+**Getting it into your DAW**
+
+- **SAVE MIDI**: one standard MIDI file with the tempo, the key signature, a marker per section and separate
+  *Chords*, *Bass* and *Melody* tracks (also each part on its own). Drag it onto a track in the DAW.
+- **QUICK EXPORT TO FOLDER** writes all four files into `Documents/Chordwave` and opens the folder.
+- **IMPORT MIDI** loads a file (a melody, a bass line, a chord part) to set it as the melody or to detect its
+  chords bar by bar, and suggests the key.
+- **MIDI OUT**: the plugin sends its notes to the host (chords on channel 1, bass on 2, melody on 3), so they
+  can be routed to any instrument. How plugin MIDI output is exposed differs between hosts; if yours cannot do
+  it, use the MIDI export.
+- **Keyboard**: set *Keyboard* to *Chords* and a single key plays the diatonic chord built on it (notes outside
+  the scale are ignored): a quick way to jam ideas in key. Playback follows the host transport, or the PLAY
+  button.
 
 ## Licence
 

@@ -121,48 +121,106 @@ impl Project {
         self.placed().into_iter().find(|p| beat >= p.start && beat < p.start + p.item_beats)
     }
 
+    /// Make room for (`delta` > 0) or close up (`delta` < 0) `delta` beats at `at` in the melody, so
+    /// the melody stays attached to its chords when chords are inserted, removed or resized.
+    pub fn ripple_melody(&mut self, at: f32, delta: f32) {
+        const EPS: f32 = 1e-4;
+        if delta >= 0.0 {
+            for n in &mut self.melody {
+                if n.start >= at - EPS {
+                    n.start += delta;
+                }
+            }
+        } else {
+            let cut = at + delta;
+            self.melody.retain(|n| !(n.start >= cut - EPS && n.start < at - EPS));
+            for n in &mut self.melody {
+                if n.start >= at - EPS {
+                    n.start += delta;
+                } else if n.end() > cut {
+                    n.len = (cut - n.start).max(0.0625);
+                }
+            }
+        }
+    }
+
+    /// Copy the melody that starts inside `start..start+len` to `start+len..` (after the gap has been made).
+    fn copy_melody(&mut self, start: f32, len: f32) {
+        let copies: Vec<Note> = self.melody_in(start, start + len).into_iter().map(|n| Note { start: n.start + len, ..n }).collect();
+        self.melody.extend(copies);
+    }
+
     /// Append a chord to the last section (creating one if the sketch is empty).
     pub fn push_chord(&mut self, chord: Chord, beats: f32) -> Sel {
         if self.sections.is_empty() {
             self.sections.push(Section { name: "A".into(), items: Vec::new() });
         }
         let si = self.sections.len() - 1;
-        self.sections[si].items.push(ChordItem::new(chord, beats));
-        Sel { section: si, item: self.sections[si].items.len() - 1 }
+        let at = self.sections[si].items.len();
+        self.insert_item(si, at, ChordItem::new(chord, beats))
+    }
+
+    /// Insert a chord item at `index` in a section. Melody after that point moves later.
+    pub fn insert_item(&mut self, section: usize, index: usize, item: ChordItem) -> Sel {
+        if self.sections.is_empty() {
+            self.sections.push(Section { name: "A".into(), items: Vec::new() });
+        }
+        let section = section.min(self.sections.len() - 1);
+        let index = index.min(self.sections[section].items.len());
+        let at = self.start_of_slot(section, index);
+        self.ripple_melody(at, item.beats);
+        self.sections[section].items.insert(index, item);
+        Sel { section, item: index }
+    }
+
+    fn start_of_slot(&self, section: usize, index: usize) -> f32 {
+        let before: f32 = self.sections[..section].iter().map(Section::beats).sum();
+        before + self.sections[section].items[..index].iter().map(|i| i.beats).sum::<f32>()
     }
 
     /// Insert a chord so that it starts at (or just before) `beat`, inside the section under it.
     pub fn insert_chord_at(&mut self, beat: f32, chord: Chord, beats: f32) -> Sel {
         let mut t = 0.0;
-        for (si, s) in self.sections.iter_mut().enumerate() {
+        for si in 0..self.sections.len() {
             let mut at = 0;
-            for it in s.items.iter() {
+            for it in self.sections[si].items.iter() {
                 if beat < t + it.beats * 0.5 {
                     break;
                 }
                 t += it.beats;
                 at += 1;
             }
-            if at < s.items.len() || beat < t + 0.01 {
-                s.items.insert(at, ChordItem::new(chord, beats));
-                return Sel { section: si, item: at };
+            if at < self.sections[si].items.len() || beat < t + 0.01 {
+                return self.insert_item(si, at, ChordItem::new(chord, beats));
             }
         }
         self.push_chord(chord, beats)
     }
 
     pub fn remove(&mut self, sel: Sel) {
-        if let Some(s) = self.sections.get_mut(sel.section) {
-            if sel.item < s.items.len() {
-                s.items.remove(sel.item);
-            }
-            if s.items.is_empty() && self.sections.len() > 1 {
-                self.sections.remove(sel.section);
-            }
+        let Some(item) = self.item(sel).cloned() else { return };
+        let start = self.start_of(sel);
+        self.sections[sel.section].items.remove(sel.item);
+        self.ripple_melody(start + item.beats, -item.beats);
+        if self.sections[sel.section].items.is_empty() && self.sections.len() > 1 {
+            self.sections.remove(sel.section);
         }
     }
 
-    /// Swap a chord with its neighbour (`dir` = -1 left, +1 right), crossing section borders.
+    /// Delete a whole section with its chords and melody (the last section is only emptied).
+    pub fn remove_section(&mut self, index: usize) {
+        let Some(s) = self.sections.get(index) else { return };
+        let beats = s.beats();
+        let start = self.start_of_slot(index, 0);
+        if self.sections.len() > 1 {
+            self.sections.remove(index);
+        } else {
+            self.sections[index].items.clear();
+        }
+        self.ripple_melody(start + beats, -beats);
+    }
+
+    /// Swap a chord with its neighbour (`dir` = -1 left, +1 right) inside its section. The melody stays where it is.
     pub fn move_item(&mut self, sel: Sel, dir: i32) -> Sel {
         let Some(s) = self.sections.get_mut(sel.section) else { return sel };
         let target = sel.item as i32 + dir;
@@ -173,22 +231,24 @@ impl Project {
         sel
     }
 
-    /// Duplicate a chord right after itself.
+    /// Duplicate a chord right after itself, together with the melody over it.
     pub fn duplicate_item(&mut self, sel: Sel) -> Sel {
-        if let Some(it) = self.item(sel).cloned() {
-            self.sections[sel.section].items.insert(sel.item + 1, it);
-            return Sel { section: sel.section, item: sel.item + 1 };
-        }
-        sel
+        let Some(it) = self.item(sel).cloned() else { return sel };
+        let start = self.start_of(sel);
+        let new = self.insert_item(sel.section, sel.item + 1, it.clone());
+        self.copy_melody(start, it.beats);
+        new
     }
 
-    /// Duplicate a whole section (chords only) right after itself.
+    /// Duplicate a whole section (chords and melody) right after itself: ready for the next verse.
     pub fn duplicate_section(&mut self, index: usize) {
-        if let Some(s) = self.sections.get(index).cloned() {
-            let mut copy = s;
-            copy.name = format!("{}'", copy.name);
-            self.sections.insert(index + 1, copy);
-        }
+        let Some(s) = self.sections.get(index).cloned() else { return };
+        let (start, beats) = (self.start_of_slot(index, 0), s.beats());
+        self.ripple_melody(start + beats, beats);
+        let mut copy = s;
+        copy.name = format!("{}'", copy.name);
+        self.sections.insert(index + 1, copy);
+        self.copy_melody(start, beats);
     }
 
     pub fn add_section(&mut self) -> usize {
@@ -197,10 +257,15 @@ impl Project {
         self.sections.len() - 1
     }
 
-    /// Change the length of one chord, snapped to a beat grid.
+    /// Change the length of one chord. Melody after it moves along; melody inside a removed part is dropped.
     pub fn set_beats(&mut self, sel: Sel, beats: f32) {
-        if let Some(it) = self.item_mut(sel) {
-            it.beats = beats.clamp(MIN_BEATS, MAX_BEATS);
+        let start = self.start_of(sel);
+        let Some(it) = self.item_mut(sel) else { return };
+        let old = it.beats;
+        let new = beats.clamp(MIN_BEATS, MAX_BEATS);
+        it.beats = new;
+        if (new - old).abs() > 1e-4 {
+            self.ripple_melody(start + old, new - old);
         }
     }
 
@@ -308,6 +373,46 @@ mod tests {
         let moved = p.move_item(s, 1);
         assert_eq!(moved.item, 1);
         assert_eq!(p.chord_at(4.5).unwrap().sel, moved);
+    }
+
+    #[test]
+    fn melody_follows_chord_edits() {
+        let mut p = starter(); // Am F C G, 4 beats each
+        p.melody = vec![Note::new(0.0, 1.0, 69, 100), Note::new(4.0, 1.0, 65, 100), Note::new(8.0, 1.0, 64, 100), Note::new(12.0, 1.0, 62, 100)];
+
+        // insert a 2-beat chord before chord 2: melody from beat 4 on moves 2 beats later
+        let mut q = p.clone();
+        q.insert_item(0, 1, ChordItem::new(Chord::new(0, Quality::Maj), 2.0));
+        assert_eq!(q.melody.iter().map(|n| n.start).collect::<Vec<_>>(), vec![0.0, 6.0, 10.0, 14.0]);
+
+        // removing chord 2 removes its melody note and pulls the rest back
+        let mut q = p.clone();
+        q.remove(Sel { section: 0, item: 1 });
+        assert_eq!(q.melody.iter().map(|n| n.start).collect::<Vec<_>>(), vec![0.0, 4.0, 8.0]);
+        assert_eq!(q.melody.iter().map(|n| n.pitch).collect::<Vec<_>>(), vec![69, 64, 62]);
+
+        // making chord 1 longer pushes the rest; shortening it drops what falls off the end
+        let mut q = p.clone();
+        q.set_beats(Sel { section: 0, item: 0 }, 6.0);
+        assert_eq!(q.melody.iter().map(|n| n.start).collect::<Vec<_>>(), vec![0.0, 6.0, 10.0, 14.0]);
+        let mut q = p.clone();
+        q.set_beats(Sel { section: 0, item: 1 }, 2.0);
+        assert_eq!(q.melody.iter().map(|n| n.start).collect::<Vec<_>>(), vec![0.0, 4.0, 6.0, 10.0]);
+
+        // duplicating a section copies its melody too
+        let mut q = p.clone();
+        q.duplicate_section(0);
+        assert_eq!(q.beats(), 32.0);
+        assert_eq!(q.melody.len(), 8);
+        assert_eq!(q.melody[4].start, 16.0);
+        assert_eq!(q.melody[4].pitch, 69);
+
+        // duplicating one chord copies the notes over it
+        let mut q = p.clone();
+        q.duplicate_item(Sel { section: 0, item: 0 });
+        assert_eq!(q.melody.iter().filter(|n| n.pitch == 69).count(), 2);
+        assert_eq!(q.melody.iter().filter(|n| n.pitch == 65).count(), 1);
+        assert_eq!(q.melody.iter().find(|n| n.pitch == 65).unwrap().start, 8.0);
     }
 
     #[test]

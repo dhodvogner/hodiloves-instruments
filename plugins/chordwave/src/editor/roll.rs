@@ -81,7 +81,7 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
     }
     lo = (lo - 2).max(0);
     hi = (hi + 2).min(127);
-    while hi - lo + 1 > 46 {
+    while hi - lo + 1 > 36 {
         if (mlo - lo) > (hi - mhi) { lo += 1 } else { hi -= 1 }
     }
     let rows = (hi - lo + 1) as f32;

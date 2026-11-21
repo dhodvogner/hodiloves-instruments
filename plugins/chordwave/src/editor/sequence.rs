@@ -236,16 +236,9 @@ fn toolbar(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
         ui.ctx().copy_text(text.join("\n"));
         cx.flash(st, "Chord names copied");
     }
-    if button(ui, place(70.0), "seq-delsec", "DEL SECTION", DIM, "Delete the selected section and its chords.") {
+    if button(ui, place(70.0), "seq-delsec", "DEL SECTION", DIM, "Delete the selected section with its chords and the melody over it.") {
         let si = st.cur_section;
-        cx.p.project.edit(|pr| {
-            if pr.sections.len() > 1 && si < pr.sections.len() {
-                pr.sections.remove(si);
-            } else if let Some(s) = pr.sections.get_mut(si) {
-                s.items.clear();
-            }
-            pr.clamp_melody();
-        });
+        cx.p.project.edit(|pr| pr.remove_section(si));
         st.sel = None;
     }
     if button(ui, place(70.0), "seq-dupsec", "DUP SECTION", DIM, "Copy the selected section and paste it right after itself: ready for the next verse or chorus.") {
@@ -275,7 +268,7 @@ fn inspector(ui: &mut Ui, cx: &Cx, st: &mut State, g: &Geo) {
     let painter = ui.painter();
     painter.text(pos2(r.left() + 4.0, r.top() + 7.0), Align2::LEFT_CENTER, format!("{}   {}   ·   {}", chord.name(cx.flats), roman(cx.key, cx.scale, &chord), notes.join(" ")), FontId::proportional(12.0), TEXT);
     let line = format!("{}: {}", f.label(), f.explain());
-    painter.text(pos2(r.left() + 4.0, r.top() + 20.0), Align2::LEFT_CENTER, ellipsize(&line, 70), FontId::proportional(9.5), function_color(f));
+    painter.text(pos2(r.left() + 4.0, r.top() + 20.0), Align2::LEFT_CENTER, ellipsize(&line, 84), FontId::proportional(9.5), function_color(f));
 
     let y = r.top() + 1.0;
     let mut x = r.left() + 430.0;

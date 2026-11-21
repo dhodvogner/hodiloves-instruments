@@ -56,9 +56,9 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
 
     // Grid.
     let label_w = 44.0;
-    let top = t + 28.0;
+    let top = t + 26.0;
     let cell_w = (inner.width() - label_w) / 7.0;
-    let cell_h = 30.0;
+    let cell_h = 26.0;
     // Column headers: the numerals of the palette's own scale.
     for d in 0..7 {
         let triad = diatonic_chord(pkey, pscale, d, Ext::Triad);
@@ -68,7 +68,7 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
         ui.painter().circle_filled(pos2(x + cell_w / 2.0 - 16.0, top + 5.0), 2.0, function_color(f));
     }
     for (ri, ext) in ROWS.iter().enumerate() {
-        let y = top + 14.0 + ri as f32 * (cell_h + 3.0);
+        let y = top + 13.0 + ri as f32 * (cell_h + 3.0);
         ui.painter().text(pos2(l + 2.0, y + cell_h / 2.0), Align2::LEFT_CENTER, ext.label().to_uppercase(), FontId::proportional(8.5), FAINT);
         for d in 0..7 {
             let chord = diatonic_chord(pkey, pscale, d, *ext);
@@ -83,5 +83,5 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
             }
         }
     }
-    ui.painter().text(pos2(inner.right() - 2.0, t + 11.0), Align2::RIGHT_CENTER, "click = listen · double-click = add · drag to the sequence", FontId::proportional(8.5), FAINT);
+    ui.painter().text(pos2(rect.right() - 14.0, rect.top() + 13.0), Align2::RIGHT_CENTER, "click = listen · double-click = add · drag to the sequence", FontId::proportional(8.5), FAINT);
 }

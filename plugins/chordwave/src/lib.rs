@@ -418,3 +418,85 @@ impl Vst3Plugin for Chordwave {
 
 nih_export_clap!(Chordwave);
 nih_export_vst3!(Chordwave);
+
+#[cfg(test)]
+mod integration {
+    use super::*;
+    use crate::engine::Engine;
+    use crate::project::starter;
+    use crate::synth::{Synth, PARTS};
+
+    /// Drive the engine and the synth exactly like `process` does and look at the audio.
+    #[test]
+    fn the_starter_sketch_is_audible_in_every_bar_and_dies_when_stopped() {
+        let sr = 48_000.0;
+        let params = ChordwaveParams::default();
+        let mut project = starter();
+        project.melody = generate::generate_melody(
+            &project,
+            &generate::MelodyCfg { key: 9, scale: Scale::Minor, genre: style::Genre::Synthwave, seed: 7, density: 0.6, lo: 60, hi: 84 },
+        );
+        let playback = build_playback(&project, &params.render_cfg());
+        assert!(playback.notes.len() > 100);
+        let mut engine = Engine::default();
+        engine.set_playback(&playback);
+        let mut synth = Synth::new(sr);
+
+        let tempo = 120.0f64;
+        let bps = tempo / 60.0 / sr as f64;
+        let block = 256usize;
+        let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);
+        let mut beat = 0.0f64;
+        let mut rms_per_bar = vec![0.0f64; 4];
+        let mut peak = 0.0f32;
+        for _ in 0..(16.0 / bps / block as f64) as usize {
+            engine.process_block(beat, block, bps, true, false, [true; 3]);
+            l.fill(0.0);
+            r.fill(0.0);
+            let mut pos = 0;
+            for ev in engine.events.clone() {
+                let t = ev.offset as usize;
+                if t > pos {
+                    synth.render(&mut l[pos..t], &mut r[pos..t], [1.0; PARTS]);
+                    pos = t;
+                }
+                if ev.on { synth.note_on(ev.pitch, ev.part, 0, ev.vel) } else { synth.note_off(ev.pitch, ev.part) }
+            }
+            synth.render(&mut l[pos..], &mut r[pos..], [1.0; PARTS]);
+            let bar = ((beat / 4.0) as usize).min(3);
+            rms_per_bar[bar] += l.iter().map(|x| (*x as f64).powi(2)).sum::<f64>();
+            peak = peak.max(l.iter().chain(&r).fold(0.0, |m, x| m.max(x.abs())));
+            assert!(l.iter().chain(&r).all(|x| x.is_finite()));
+            beat += block as f64 * bps;
+        }
+        for (bar, e) in rms_per_bar.iter().enumerate() {
+            assert!(*e > 1.0, "bar {bar} is silent (energy {e})");
+        }
+        assert!(peak > 0.05 && peak < 4.0, "peak {peak}");
+
+        // Stop: every note is released and the synth falls silent.
+        engine.process_block(0.0, block, bps, false, false, [true; 3]);
+        for ev in engine.events.clone() {
+            assert!(!ev.on);
+            synth.note_off(ev.pitch, ev.part);
+        }
+        for _ in 0..400 {
+            l.fill(0.0);
+            r.fill(0.0);
+            synth.render(&mut l, &mut r, [1.0; PARTS]);
+        }
+        assert!(!synth.is_busy(), "voices still sounding after stop");
+    }
+
+    #[test]
+    fn rebuild_publishes_a_playback_for_the_audio_thread() {
+        let params = ChordwaveParams::default();
+        let shared = Shared::default();
+        assert_eq!(shared.playback_version.load(Ordering::Relaxed), 0);
+        rebuild(&params, &shared);
+        assert_eq!(shared.playback_version.load(Ordering::Relaxed), 1);
+        let pb = shared.playback.lock().unwrap();
+        assert_eq!(pb.len, 16.0);
+        assert!(pb.notes.windows(2).all(|w| w[0].start <= w[1].start), "playback must be sorted");
+    }
+}

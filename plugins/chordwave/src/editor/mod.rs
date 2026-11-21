@@ -132,16 +132,12 @@ impl<'a> Cx<'a> {
         let new_sel = self.p.project.edit(|pr| {
             if let Some(s) = sel.filter(|s| pr.item(*s).is_some()) {
                 let beats = pr.item(s).map(|i| i.beats).unwrap_or(4.0);
-                pr.sections[s.section].items.insert(s.item + 1, ChordItem::new(chord, beats));
-                Sel { section: s.section, item: s.item + 1 }
+                pr.insert_item(s.section, s.item + 1, ChordItem::new(chord, beats))
             } else {
-                if pr.sections.is_empty() {
-                    pr.sections.push(Section { name: "A".into(), items: Vec::new() });
-                }
-                let si = section.min(pr.sections.len() - 1);
-                let beats = pr.sections[si].items.last().map(|i| i.beats).unwrap_or(4.0);
-                pr.sections[si].items.push(ChordItem::new(chord, beats));
-                Sel { section: si, item: pr.sections[si].items.len() - 1 }
+                let si = section.min(pr.sections.len().saturating_sub(1));
+                let beats = pr.sections.get(si).and_then(|s| s.items.last()).map(|i| i.beats).unwrap_or(4.0);
+                let at = pr.sections.get(si).map_or(0, |s| s.items.len());
+                pr.insert_item(si, at, ChordItem::new(chord, beats))
             }
         });
         st.cur_section = new_sel.section;
@@ -289,10 +285,8 @@ fn header(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
         "Repeat the sketch endlessly. Off: play it once, then stop.");
 
     // Scale notes.
-    let notes: Vec<&str> = {
-        let mask = scale_mask(cx.key, cx.scale);
-        (0..12u8).filter(|p| mask[*p as usize]).map(|p| pc_name(p, cx.flats)).collect()
-    };
+    // In scale order starting from the tonic (A B C D E F G), not in pitch-class order.
+    let notes: Vec<&str> = cx.scale.intervals().iter().map(|i| pc_name((cx.key + i) % 12, cx.flats)).collect();
     spaced_text(ui.painter(), pos2(l + 940.0, t + 22.0), "SCALE NOTES", 8.0, FAINT, 1.2);
     ui.painter().text(pos2(l + 940.0, t + 38.0), Align2::LEFT_CENTER, notes.join("  "), FontId::proportional(11.0), AQUA);
 
