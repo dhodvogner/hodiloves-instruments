@@ -138,7 +138,7 @@ pub fn generate_melody(project: &Project, cfg: &MelodyCfg) -> Vec<Note> {
                         let pc = (scale_pool[j as usize].rem_euclid(12)) as u8;
                         if chord_pcs.contains(&pc) {
                             let cost = d.abs() * 2 + if j as usize == idx { 1 } else { 0 };
-                            if best.map_or(true, |b| cost < b.0) {
+                            if best.is_none_or(|b| cost < b.0) {
                                 best = Some((cost, j as usize));
                             }
                         }

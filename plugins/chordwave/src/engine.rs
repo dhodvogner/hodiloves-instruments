@@ -190,7 +190,7 @@ impl Engine {
                 if let Some(on) = a.on_offset {
                     offset = offset.max(on + 1);
                 }
-                if offset as usize <= n - 1 {
+                if (offset as usize) < n {
                     self.push(Ev { offset, on: false, pitch: a.pitch, vel: 0, part: a.part });
                     self.active.swap_remove(i);
                     continue;

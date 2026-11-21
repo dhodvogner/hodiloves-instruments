@@ -115,7 +115,8 @@ sits an octave lower than synthwave) with rhythm patterns: sustained, driving 8t
 - Notes in between move by **step through the scale** (passing notes), with the occasional skip.
 - Two **rhythms alternate bar by bar** (question and answer) and a **motif** of stepwise moves is reused, with
   variation, so it sounds intentional.
-- The **contour** rises in the first half and falls in the second.
+- A gentle **contour bias** nudges random steps upwards in the first half of the sketch and downwards in the
+  second, so lines tend to arch.
 - A third repeat of the same pitch is avoided, each chord **ends on a chord tone** and the last note resolves to
   the root.
 - *Density* changes how busy the rhythm is; the genre picks rhythm pools (long notes for cinematic, off-grid

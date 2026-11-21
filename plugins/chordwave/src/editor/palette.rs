@@ -74,7 +74,7 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
             let chord = diatonic_chord(pkey, pscale, d, *ext);
             let x = l + label_w + d as f32 * cell_w;
             let cell = Rect::from_min_size(pos2(x + 1.5, y), vec2(cell_w - 3.0, cell_h));
-            let selected = st.sel.and_then(|s| cx.project.item(s)).map_or(false, |it| it.chord == chord);
+            let selected = st.sel.and_then(|s| cx.project.item(s)).is_some_and(|it| it.chord == chord);
             let rn = roman(cx.key, cx.scale, &chord);
             let resp = chord_cell(ui, cell, Id::new(("pal", ri, d)), &chord, pflats, Some(&rn), chord.in_key(cx.key, cx.scale), selected);
             let resp = chord_tip(resp, &chord, cx.key, cx.scale, pflats);

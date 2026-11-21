@@ -447,7 +447,7 @@ mod integration {
         let block = 256usize;
         let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);
         let mut beat = 0.0f64;
-        let mut rms_per_bar = vec![0.0f64; 4];
+        let mut rms_per_bar = [0.0f64; 4];
         let mut peak = 0.0f32;
         for _ in 0..(16.0 / bps / block as f64) as usize {
             engine.process_block(beat, block, bps, true, false, [true; 3]);

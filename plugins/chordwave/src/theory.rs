@@ -497,7 +497,7 @@ pub fn voice_lead(prev: &[u8], chord: &Chord, spread: bool, center: i32) -> (Vec
                 / notes.len() as f32;
             let mean = notes.iter().map(|&n| n as f32).sum::<f32>() / notes.len() as f32;
             let score = cost + 0.35 * (mean - prev_mean).abs() + 0.05 * (mean - center as f32).abs();
-            if best.as_ref().map_or(true, |b| score < b.0) {
+            if best.as_ref().is_none_or(|b| score < b.0) {
                 best = Some((score, notes, inv));
             }
         }

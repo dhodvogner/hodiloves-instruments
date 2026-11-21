@@ -160,7 +160,7 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
         let chord = cx.project.chord_at(n.start + 0.001).map(|p| p.chord);
         let (col, kind) = if !mask[pc as usize] {
             (Color32::from_rgb(255, 120, 90), "outside the scale")
-        } else if chord.map_or(false, |c| c.contains_pc(pc)) {
+        } else if chord.is_some_and(|c| c.contains_pc(pc)) {
             (AQUA, "chord tone")
         } else {
             (MINOR_C, "scale tone (passing)")
@@ -209,7 +209,7 @@ fn key_strip(ui: &mut Ui, cx: &Cx, st: &mut State, view: &View, inner: Rect, mas
             painter.rect_filled(Rect::from_min_size(pos2(strip.left(), y + 0.5), vec2(3.0, view.row_h - 1.0)), 0.0, if pc == cx.key { ACCENT } else { AQUA.gamma_multiply(0.7) });
         }
         if pc == 0 || pc == cx.key || view.row_h >= 9.0 {
-            let label = if pc == 0 { format!("C{}", pitch / 12 - 1) } else if pc == cx.key && view.row_h < 9.0 { pc_name(pc, cx.flats).to_string() } else if view.row_h >= 9.0 { pc_name(pc, cx.flats).to_string() } else { String::new() };
+            let label = if pc == 0 { format!("C{}", pitch / 12 - 1) } else { pc_name(pc, cx.flats).to_string() };
             painter.text(pos2(strip.right() - 3.0, y + view.row_h / 2.0), Align2::RIGHT_CENTER, label, FontId::proportional(7.5), if black { FAINT } else { Color32::from_rgb(20, 22, 27) });
         }
     }
@@ -339,7 +339,7 @@ fn interact(ui: &mut Ui, cx: &Cx, st: &mut State, view: &View, total_beats: f32)
     }
     if resp.hovered() || st.roll.drag.is_some() {
         if let Some(p) = pos {
-            if hit_note(p).map_or(false, |i| p.x > view.note_rect(&cx.project.melody[i]).right() - 6.0) {
+            if hit_note(p).is_some_and(|i| p.x > view.note_rect(&cx.project.melody[i]).right() - 6.0) {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
             }
         }

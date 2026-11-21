@@ -201,6 +201,28 @@ mod tests {
         }
     }
 
+    /// What a DAW does when it saves and reloads a project: serialise the persistent fields, restore them elsewhere.
+    #[test]
+    fn the_sketch_survives_a_host_save_and_restore() {
+        use crate::project::{Note, Sel};
+        let original = ChordwaveParams::default();
+        original.project.edit(|p| {
+            p.insert_item(0, 1, crate::project::ChordItem::new(Chord::new(2, Quality::Min7), 2.0));
+            p.melody = vec![Note::new(0.0, 1.5, 72, 99), Note::new(6.0, 0.5, 64, 80)];
+            p.sections.push(crate::project::Section { name: "Chorus".into(), items: vec![] });
+            p.item_mut(Sel { section: 0, item: 0 }).unwrap().inversion = Some(1);
+        });
+        let saved = original.serialize_fields();
+        assert!(saved.contains_key("project"), "{:?}", saved.keys().collect::<Vec<_>>());
+
+        let restored = ChordwaveParams::default();
+        assert_ne!(restored.project.get(), original.project.get());
+        restored.deserialize_fields(&saved);
+        assert_eq!(restored.project.get(), original.project.get());
+        assert_eq!(restored.project.get().melody.len(), 2);
+        assert_eq!(restored.project.get().sections[1].name, "Chorus");
+    }
+
     #[test]
     fn defaults_are_a_synthwave_a_minor_sketch() {
         let p = ChordwaveParams::default();

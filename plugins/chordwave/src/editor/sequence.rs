@@ -78,7 +78,7 @@ pub fn draw(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
         resp.on_hover_text("Section. Click to make it the target for new chords and for the section buttons.");
         start += beats;
     }
-    if cx.project.sections.get(st.cur_section).map_or(false, |s| s.items.is_empty()) {
+    if cx.project.sections.get(st.cur_section).is_some_and(|s| s.items.is_empty()) {
         let x = g.x0 + start * g.ppb;
         ui.painter().text(pos2(x + 8.0, g.strip_y + 6.0), Align2::LEFT_CENTER, "new section: add chords", FontId::proportional(9.0), FAINT);
     }
