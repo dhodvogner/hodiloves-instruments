@@ -10,9 +10,7 @@ use nih_plug_egui::EguiState;
 use std::sync::Arc;
 
 pub const EDITOR_W: u32 = 1200;
-pub const EDITOR_H: u32 = 812;
-/// Height of the keyboard strip at the bottom of the standalone window.
-pub const KEYBOARD_H: u32 = 70;
+pub const EDITOR_H: u32 = 860;
 
 fn names_param(name: &str, default: i32, names: &'static [&'static str]) -> IntParam {
     IntParam::new(name, default, IntRange::Linear { min: 0, max: names.len() as i32 - 1 })

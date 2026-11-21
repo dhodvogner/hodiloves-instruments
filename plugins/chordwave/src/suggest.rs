@@ -146,6 +146,31 @@ pub fn match_melody(weights: &[f32; 12], key: u8, scale: Scale, genre: Genre) ->
     out
 }
 
+/// Work out a chord for every `grid` beats of some notes (a melody, a bassline or a chord part).
+/// Identical neighbours are merged into one longer chord. Returns (chord, beats).
+pub fn detect_chords(notes: &[Note], key: u8, scale: Scale, genre: Genre, grid: f32) -> Vec<(Chord, f32)> {
+    let end = notes.iter().map(Note::end).fold(0.0, f32::max);
+    let slots = (end / grid).ceil() as usize;
+    let mut out: Vec<(Chord, f32)> = Vec::new();
+    for i in 0..slots {
+        let (a, b) = (i as f32 * grid, (i + 1) as f32 * grid);
+        // Count only the part of each note that falls inside the slot.
+        let clipped: Vec<Note> = notes
+            .iter()
+            .filter(|n| n.start < b && n.end() > a)
+            .map(|n| Note::new(n.start.max(a), n.end().min(b) - n.start.max(a), n.pitch, n.vel))
+            .collect();
+        let best = match_melody(&pc_weights(&clipped), key, scale, genre).into_iter().find(|m| m.score >= 0.45).map(|m| m.chord);
+        match (best, out.last_mut()) {
+            (Some(c), Some(last)) if last.0 == c => last.1 += grid,
+            (Some(c), _) => out.push((c, grid)),
+            (None, Some(last)) => last.1 += grid, // nothing playing: hold the previous chord
+            (None, None) => {}
+        }
+    }
+    out
+}
+
 // ---------------------------------------------------------------------------------------------
 // What comes next
 // ---------------------------------------------------------------------------------------------
@@ -365,6 +390,21 @@ mod tests {
         let s = suggest_next(Some(&am), 9, Scale::Minor, Genre::Synthwave);
         let top: Vec<_> = s.iter().take(3).map(|x| x.chord.name(false)).collect();
         assert!(top.contains(&"F".to_string()) || top.contains(&"G".to_string()), "{top:?}");
+    }
+
+    #[test]
+    fn detects_chords_per_bar_and_merges_repeats() {
+        // Two bars of A minor arpeggio, two bars of F major arpeggio
+        let mut n = Vec::new();
+        for bar in 0..4 {
+            let pitches: [u8; 3] = if bar < 2 { [57, 60, 64] } else { [53, 57, 60] };
+            for (i, p) in pitches.iter().enumerate() {
+                n.push(Note::new(bar as f32 * 4.0 + i as f32, 1.0, *p, 100));
+            }
+        }
+        let chords = detect_chords(&n, 9, Scale::Minor, Genre::Any, 4.0);
+        let names: Vec<_> = chords.iter().map(|(c, b)| format!("{} x{}", c.name(false), b)).collect();
+        assert_eq!(names, ["Am x8", "F x8"]);
     }
 
     #[test]
