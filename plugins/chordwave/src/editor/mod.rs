@@ -67,6 +67,8 @@ pub struct State {
     pub message: Option<(String, f64)>,
     /// The melody before the last generate / clear / fix, for UNDO.
     pub undo_melody: Option<Vec<Note>>,
+    /// Drums are exported as Neon Break pattern keys (true) or as plain drum notes (false).
+    pub drum_keys: bool,
 }
 
 impl Default for State {
@@ -90,6 +92,7 @@ impl Default for State {
             transpose_with_key: true,
             message: None,
             undo_melody: None,
+            drum_keys: true,
         }
     }
 }

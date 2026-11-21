@@ -9,6 +9,8 @@ use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+pub mod dragout;
+pub mod drums;
 pub mod editor;
 pub mod engine;
 pub mod generate;

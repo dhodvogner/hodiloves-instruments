@@ -166,14 +166,30 @@ immediately.
 
 **Getting it into your DAW**
 
-- **SAVE MIDI**: one standard MIDI file with the tempo, the key signature, a marker per section and separate
-  *Chords*, *Bass* and *Melody* tracks (also each part on its own). Drag it onto a track in the DAW.
-- **QUICK EXPORT TO FOLDER** writes all four files into `Documents/Chordwave` and opens the folder.
-- **IMPORT MIDI** loads a file (a melody, a bass line, a chord part) to set it as the melody or to detect its
+- **Drag a pad into the piano roll.** The *To your DAW* panel has five pads. Pick one up and drop it on a
+  channel's piano roll, a channel or the Playlist (in FL Studio, onto the piano roll of the instrument that
+  should play it). A click on a pad saves the file instead. Dragging works on **Windows** (it is the same file
+  drag as from Explorer); on other systems the pads save a file. It is untested in a real FL Studio here:
+  if a drop does nothing in your host, use *Quick export* and drag the file from the folder.
+- **Shortcuts for the instruments of this pack**: each pad is shaped for one of them.
+
+  | Pad | Made for | What is in the file |
+  |---|---|---|
+  | CHORDS | Remedy | the chord part (chord style, voicing, octave), polyphonic |
+  | BASS | Wub Machine | the bass line, one note at a time, in the genre's bass range |
+  | DRUMS | Neon Break | **Keys**: Neon Break's own pattern-slot keys (one per section, a fill key over the last bar) so it plays *its* patterns; **Plain notes**: the same patterns as ordinary drum notes (36 kick, 38 snare, 42 / 46 hats...) for any drum machine, with a crash at each new section |
+  | MELODY | any synth | the piano-roll melody |
+  | ALL PARTS | a DAW session | one file with tempo, key, a marker per section and Chords / Bass / Melody tracks |
+
+  The drum patterns follow the genre (synthwave: *Outrun* and *Neon Chase*; drum and bass: *Two-Step* and
+  *Roller*; liquid: *Liquid*, and so on), alternating between sections. Keep Neon Break's pattern mode on
+  *Pattern keys* (its default) for the keys version.
+- **Quick export to folder** writes every file into `Documents/Chordwave` and opens the folder.
+- **Import MIDI** loads a file (a melody, a bass line, a chord part) to set it as the melody or to detect its
   chords bar by bar, and suggests the key.
-- **MIDI OUT**: the plugin sends its notes to the host (chords on channel 1, bass on 2, melody on 3), so they
+- **MIDI out**: the plugin sends its notes to the host (chords on channel 1, bass on 2, melody on 3), so they
   can be routed to any instrument. How plugin MIDI output is exposed differs between hosts; if yours cannot do
-  it, use the MIDI export.
+  it, use the pads.
 - **Keyboard**: set *Keyboard* to *Chords* and a single key plays the diatonic chord built on it (notes outside
   the scale are ignored): a quick way to jam ideas in key. Playback follows the host transport, or the PLAY
   button.
