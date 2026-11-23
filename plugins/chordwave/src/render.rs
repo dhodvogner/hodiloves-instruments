@@ -16,12 +16,17 @@ pub struct RenderCfg {
     /// Open (drop-2) voicings.
     pub spread: bool,
     pub bass_range: (i32, i32),
+    pub genre: Genre,
+    /// Chosen drum pattern (index into `drums::PATTERNS`), or `None` for the genre's own.
+    pub drum_pattern: Option<usize>,
+    /// A fill on the last bar of each section.
+    pub drum_fills: bool,
 }
 
 impl RenderCfg {
     pub fn new(key: u8, scale: Scale, genre: Genre) -> Self {
         let (chord_style, bass_style) = genre.default_styles();
-        Self { key, scale, chord_style, bass_style, center: 60, spread: false, bass_range: genre.bass_range() }
+        Self { key, scale, chord_style, bass_style, center: 60, spread: false, bass_range: genre.bass_range(), genre, drum_pattern: None, drum_fills: true }
     }
 }
 
@@ -30,11 +35,12 @@ pub struct Rendered {
     pub chords: Vec<Note>,
     pub bass: Vec<Note>,
     pub melody: Vec<Note>,
+    pub drums: Vec<Note>,
 }
 
 impl Rendered {
     pub fn all(&self) -> impl Iterator<Item = &Note> {
-        self.chords.iter().chain(self.bass.iter()).chain(self.melody.iter())
+        self.chords.iter().chain(self.bass.iter()).chain(self.melody.iter()).chain(self.drums.iter())
     }
 }
 
@@ -57,6 +63,7 @@ pub fn voicings(project: &Project, cfg: &RenderCfg) -> Vec<(Placed, Vec<u8>)> {
 
 pub fn render(project: &Project, cfg: &RenderCfg) -> Rendered {
     let mut out = Rendered { melody: project.melody.clone(), ..Default::default() };
+    out.drums = crate::drums::render_drums(project, cfg.genre, crate::drums::DrumMode::Notes, cfg.drum_pattern, cfg.drum_fills);
     for (placed, notes) in voicings(project, cfg) {
         let (start, end) = (placed.start, placed.start + placed.item_beats);
         render_chord(&mut out.chords, &notes, start, end, cfg.chord_style);
@@ -140,7 +147,7 @@ mod tests {
     use super::*;
 
     fn cfg(style: ChordStyle, bass: BassStyle) -> RenderCfg {
-        RenderCfg { key: 9, scale: Scale::Minor, chord_style: style, bass_style: bass, center: 60, spread: false, bass_range: (33, 45) }
+        RenderCfg { chord_style: style, bass_style: bass, ..RenderCfg::new(9, Scale::Minor, Genre::Any) }
     }
 
     #[test]

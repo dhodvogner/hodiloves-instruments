@@ -2,14 +2,42 @@
 //! plucks and keys for the chords, a sub bass and a lead. Not meant to replace your own synths:
 //! turn on MIDI out (or export the MIDI) and play the parts on those.
 
+use crate::drumsynth::DrumSynth;
 use plugin_common::dsp::{midi_to_hz, Adsr, AdsrCoefs, Ladder};
 
-pub const PARTS: usize = 3;
+pub const PARTS: usize = 4;
 pub const PART_CHORDS: u8 = 0;
 pub const PART_BASS: u8 = 1;
 pub const PART_MELODY: u8 = 2;
+pub const PART_DRUMS: u8 = 3;
 
-pub const SOUND_NAMES: [&str; 3] = ["Pad", "Pluck", "Keys"];
+pub const SOUND_NAMES: [&str; 5] = ["Pad", "Pluck", "Keys", "Strings", "Bright"];
+pub const BASS_SOUND_NAMES: [&str; 3] = ["Sub", "Saw", "Reese"];
+pub const MELODY_SOUND_NAMES: [&str; 4] = ["Lead", "Pluck", "Soft", "Bright"];
+
+/// The sounds of one part (0 chords, 1 bass, 2 melody) with a plain-words description each.
+pub fn sounds_for(part: u8) -> (&'static [&'static str], &'static [&'static str]) {
+    match part {
+        PART_BASS => (&BASS_SOUND_NAMES, &[
+            "A deep, clean low sine with a little edge. Solid and modern: works under almost anything.",
+            "A buzzy sawtooth bass with a filter that opens on each note. More aggressive and audible on small speakers.",
+            "Several detuned saws, slowly shifting against each other: the wide, growling Reese bass of drum and bass.",
+        ]),
+        PART_MELODY => (&MELODY_SOUND_NAMES, &[
+            "A classic detuned saw lead: bright, bold and easy to hear over the chords.",
+            "A short, plucky note that dies away quickly: playful, great for arpeggio-style melodies.",
+            "A mellow, rounded tone with a slow attack: gentle and emotional.",
+            "A big, wide, super-saw style lead: shiny and euphoric (trance, synthwave anthems).",
+        ]),
+        _ => (&SOUND_NAMES, &[
+            "A warm, slow-fading synth pad with a gentle filter. The default sound of this plugin.",
+            "Short, plucky chords that decay fast. Clear and rhythmic, good for stabs and arpeggios.",
+            "A soft electric-piano-like tone. Relaxed, a bit jazzy.",
+            "A slow, wide, string-like pad with a long release. Cinematic and emotional.",
+            "A bright, wide super-saw chord sound with a fast attack. Energetic and anthemic.",
+        ]),
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Patch {
@@ -27,19 +55,30 @@ pub struct Patch {
     pub level: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
+const fn pt(attack: f32, decay: f32, sustain: f32, release: f32, cutoff: f32, resonance: f32, env_amount: f32, detune_cents: f32, sub: f32, saw: f32, level: f32) -> Patch {
+    Patch { attack, decay, sustain, release, cutoff, resonance, env_amount, detune_cents, sub, saw, level }
+}
+
 pub fn patch(part: u8, sound: usize) -> Patch {
     match part {
-        PART_BASS => Patch { attack: 3.0, decay: 120.0, sustain: 0.9, release: 90.0, cutoff: 380.0, resonance: 1.1,
-            env_amount: 1.5, detune_cents: 0.0, sub: 0.9, saw: 0.45, level: 0.5 },
-        PART_MELODY => Patch { attack: 6.0, decay: 220.0, sustain: 0.7, release: 160.0, cutoff: 3200.0, resonance: 0.8,
-            env_amount: 1.0, detune_cents: 7.0, sub: 0.0, saw: 0.8, level: 0.2 },
+        PART_BASS => match sound {
+            1 => pt(3.0, 160.0, 0.8, 90.0, 900.0, 1.4, 2.5, 3.0, 0.3, 0.9, 0.42),
+            2 => pt(12.0, 200.0, 0.9, 140.0, 520.0, 0.8, 1.0, 14.0, 0.5, 0.9, 0.42),
+            _ => pt(3.0, 120.0, 0.9, 90.0, 380.0, 1.1, 1.5, 0.0, 0.9, 0.45, 0.5),
+        },
+        PART_MELODY => match sound {
+            1 => pt(2.0, 220.0, 0.0, 120.0, 2000.0, 0.8, 3.0, 5.0, 0.0, 0.8, 0.2),
+            2 => pt(25.0, 300.0, 0.8, 300.0, 1500.0, 0.2, 0.4, 4.0, 0.0, 0.4, 0.22),
+            3 => pt(5.0, 300.0, 0.75, 220.0, 6000.0, 0.3, 0.8, 20.0, 0.0, 0.95, 0.15),
+            _ => pt(6.0, 220.0, 0.7, 160.0, 3200.0, 0.8, 1.0, 7.0, 0.0, 0.8, 0.2),
+        },
         _ => match sound {
-            1 => Patch { attack: 2.0, decay: 260.0, sustain: 0.0, release: 140.0, cutoff: 1300.0, resonance: 1.0,
-                env_amount: 3.0, detune_cents: 6.0, sub: 0.0, saw: 0.8, level: 0.2 },
-            2 => Patch { attack: 3.0, decay: 800.0, sustain: 0.3, release: 260.0, cutoff: 2800.0, resonance: 0.3,
-                env_amount: 1.2, detune_cents: 3.0, sub: 0.15, saw: 0.55, level: 0.2 },
-            _ => Patch { attack: 45.0, decay: 400.0, sustain: 0.8, release: 520.0, cutoff: 2000.0, resonance: 0.6,
-                env_amount: 0.6, detune_cents: 10.0, sub: 0.0, saw: 0.85, level: 0.16 },
+            1 => pt(2.0, 260.0, 0.0, 140.0, 1300.0, 1.0, 3.0, 6.0, 0.0, 0.8, 0.2),
+            2 => pt(3.0, 800.0, 0.3, 260.0, 2800.0, 0.3, 1.2, 3.0, 0.15, 0.55, 0.2),
+            3 => pt(140.0, 500.0, 0.85, 800.0, 2600.0, 0.4, 0.3, 14.0, 0.0, 0.95, 0.15),
+            4 => pt(8.0, 300.0, 0.75, 300.0, 5200.0, 0.3, 0.8, 22.0, 0.0, 0.95, 0.15),
+            _ => pt(45.0, 400.0, 0.8, 520.0, 2000.0, 0.6, 0.6, 10.0, 0.0, 0.85, 0.16),
         },
     }
 }
@@ -171,15 +210,20 @@ pub const VOICES: usize = 40;
 
 pub struct Synth {
     pub voices: Vec<Voice>,
+    pub drums: DrumSynth,
     pub sample_rate: f32,
 }
 
 impl Synth {
     pub fn new(sample_rate: f32) -> Self {
-        Self { voices: vec![Voice::default(); VOICES], sample_rate }
+        Self { voices: vec![Voice::default(); VOICES], drums: DrumSynth::new(sample_rate), sample_rate }
     }
 
     pub fn note_on(&mut self, pitch: u8, part: u8, sound: usize, velocity: u8) {
+        if part == PART_DRUMS {
+            self.drums.trigger(pitch, velocity);
+            return;
+        }
         let sr = self.sample_rate;
         // Retrigger the same note of the same part, else take a free voice, else the oldest.
         let index = self
@@ -193,6 +237,9 @@ impl Synth {
     }
 
     pub fn note_off(&mut self, pitch: u8, part: u8) {
+        if part == PART_DRUMS {
+            return; // drum hits play out on their own
+        }
         for v in self.voices.iter_mut().filter(|v| v.gated && v.pitch == pitch && v.part == part) {
             v.release();
         }
@@ -208,10 +255,11 @@ impl Synth {
         for v in &mut self.voices {
             v.kill();
         }
+        self.drums.kill_all();
     }
 
     pub fn is_busy(&self) -> bool {
-        self.voices.iter().any(|v| !v.is_idle())
+        self.voices.iter().any(|v| !v.is_idle()) || self.drums.is_busy()
     }
 
     /// Mix `out_l` / `out_r` with every voice (adds to what is already there).
@@ -225,6 +273,7 @@ impl Synth {
                 *r += b * gain;
             }
         }
+        self.drums.render(out_l, out_r, part_gain[PART_DRUMS as usize]);
     }
 }
 
@@ -252,8 +301,8 @@ mod tests {
 
     #[test]
     fn every_patch_is_audible_and_stable() {
-        for part in 0..PARTS as u8 {
-            for sound in 0..SOUND_NAMES.len() {
+        for part in 0..3u8 {
+            for sound in 0..sounds_for(part).0.len() {
                 let mut s = Synth::new(44_100.0);
                 for n in [36u8, 60, 84] {
                     s.note_on(n, part, sound, 110);
@@ -264,6 +313,31 @@ mod tests {
                 assert!(peak > 0.005 && peak < 2.0 && l.iter().all(|x| x.is_finite()), "part {part} sound {sound} peak {peak}");
             }
         }
+    }
+
+    #[test]
+    fn every_sound_has_a_name_and_a_description() {
+        for part in 0..3u8 {
+            let (names, blurbs) = sounds_for(part);
+            assert_eq!(names.len(), blurbs.len(), "part {part}");
+            assert!(names.len() >= 3);
+        }
+    }
+
+    #[test]
+    fn drums_play_through_the_synth_and_ignore_note_off() {
+        let mut s = Synth::new(48_000.0);
+        s.note_on(36, PART_DRUMS, 0, 110);
+        s.note_off(36, PART_DRUMS);
+        let (mut l, mut r) = (vec![0.0; 2400], vec![0.0; 2400]);
+        s.render(&mut l, &mut r, [1.0; PARTS]);
+        assert!(l.iter().fold(0.0f32, |m, x| m.max(x.abs())) > 0.05);
+        // muted by its gain
+        let mut s = Synth::new(48_000.0);
+        s.note_on(36, PART_DRUMS, 0, 110);
+        let (mut l, mut r) = (vec![0.0; 2400], vec![0.0; 2400]);
+        s.render(&mut l, &mut r, [1.0, 1.0, 1.0, 0.0]);
+        assert!(l.iter().all(|x| *x == 0.0));
     }
 
     #[test]

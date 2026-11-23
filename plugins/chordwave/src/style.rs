@@ -152,6 +152,18 @@ impl ChordStyle {
             ChordStyle::ArpUp | ChordStyle::ArpUpDown => &[],
         }
     }
+    /// What the pattern does, in plain words.
+    pub fn blurb(self) -> &'static str {
+        match self {
+            ChordStyle::Sustain => "Each chord is held for its whole length. The calmest option: lush pads, ballads, intros.",
+            ChordStyle::Pulse => "Chords repeat on every eighth note. Steady and driving: pop, trance, 80s drive.",
+            ChordStyle::Offbeat => "Short stabs between the beats (the 'and'). The classic house and trance bounce.",
+            ChordStyle::Gated => "Chopped into 16th-note bursts, like a pad run through a gate. The synthwave signature.",
+            ChordStyle::Stabs => "Short hits on syncopated spots: the groove of liquid drum and bass and lo-fi.",
+            ChordStyle::ArpUp => "The notes of each chord play one after another, rising, in 16ths. Sparkly and busy.",
+            ChordStyle::ArpUpDown => "Like the arpeggio, but it climbs and falls back. Smoother, more flowing.",
+        }
+    }
     pub fn is_arp(self) -> bool {
         matches!(self, ChordStyle::ArpUp | ChordStyle::ArpUpDown)
     }
@@ -195,6 +207,18 @@ impl BassStyle {
             BassStyle::Offbeat => "Offbeat root",
             BassStyle::TwoStep => "DnB two-step",
             BassStyle::Rolling => "DnB rolling",
+        }
+    }
+    /// What the pattern does, in plain words.
+    pub fn blurb(self) -> &'static str {
+        match self {
+            BassStyle::Off => "No bass line. Use this if you play your own bass.",
+            BassStyle::Sustain => "One long root note per chord. Simple, solid, leaves room for other parts.",
+            BassStyle::Eighths => "Steady eighth notes on the root. The driving synthwave and 80s pop bass.",
+            BassStyle::Octaves => "Eighth notes that jump between the root and the octave above. Bouncy disco feel.",
+            BassStyle::Offbeat => "Root notes only between the beats: the pumping house and trance bass.",
+            BassStyle::TwoStep => "Notes on 1 and the 'and' of 2, matching a two-step drum beat. Drum and bass.",
+            BassStyle::Rolling => "A busy 16th-note pattern with octave jumps. The rolling drum and bass bass.",
         }
     }
     /// (start, length, semitones above the root) inside one bar.

@@ -3,7 +3,8 @@
 
 use crate::project::ProjectCell;
 use crate::style::*;
-use crate::synth::SOUND_NAMES;
+use crate::drums::PATTERNS;
+use crate::synth::{BASS_SOUND_NAMES, MELODY_SOUND_NAMES, SOUND_NAMES};
 use crate::theory::*;
 use nih_plug::prelude::*;
 use nih_plug_egui::EguiState;
@@ -76,6 +77,19 @@ pub struct ChordwaveParams {
     pub midi_out: BoolParam,
     #[id = "sound"]
     pub sound: IntParam,
+    #[id = "bsound"]
+    pub bass_sound: IntParam,
+    #[id = "msound"]
+    pub melody_sound: IntParam,
+    /// 0 = the genre's own patterns, 1.. = one of Neon Break's patterns.
+    #[id = "dpat"]
+    pub drum_pattern: IntParam,
+    #[id = "dfills"]
+    pub drum_fills: BoolParam,
+    #[id = "drums_on"]
+    pub drums_on: BoolParam,
+    #[id = "drums_vol"]
+    pub drums_vol: FloatParam,
     #[id = "chords_on"]
     pub chords_on: BoolParam,
     #[id = "bass_on"]
@@ -133,6 +147,13 @@ impl Default for ChordwaveParams {
             internal: BoolParam::new("Internal sound", true),
             midi_out: BoolParam::new("MIDI out", false),
             sound: names_param("Chord sound", 0, &SOUND_NAMES),
+            bass_sound: names_param("Bass sound", 0, &BASS_SOUND_NAMES),
+            melody_sound: names_param("Melody sound", 0, &MELODY_SOUND_NAMES),
+            drum_pattern: IntParam::new("Drum pattern", 0, IntRange::Linear { min: 0, max: PATTERNS.len() as i32 })
+                .with_value_to_string(Arc::new(|v| if v <= 0 { "Auto".to_string() } else { PATTERNS[(v as usize - 1).min(PATTERNS.len() - 1)].name.to_string() })),
+            drum_fills: BoolParam::new("Drum fills", true),
+            drums_on: BoolParam::new("Drums on", true),
+            drums_vol: vol("Drums level"),
             chords_on: BoolParam::new("Chords on", true),
             bass_on: BoolParam::new("Bass on", true),
             melody_on: BoolParam::new("Melody on", true),
@@ -162,6 +183,8 @@ impl ChordwaveParams {
         cfg.bass_style = BassStyle::from_index(self.bass_style.value().max(0) as usize);
         cfg.spread = self.spread.value();
         cfg.center = 60 + 12 * self.octave.value();
+        cfg.drum_pattern = (self.drum_pattern.value() > 0).then(|| self.drum_pattern.value() as usize - 1);
+        cfg.drum_fills = self.drum_fills.value();
         cfg
     }
     /// Range (low, high) of generated melodies.

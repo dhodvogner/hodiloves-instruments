@@ -147,11 +147,13 @@ the top right.
 | | |
 |---|---|
 | ![Start](images/chordwave-start.png) | ![Chords](images/chordwave-chords.png) |
-| ![Melody](images/chordwave.png) | ![Export](images/chordwave-export.png) |
+| ![Melody](images/chordwave.png) | ![Sound](images/chordwave-sound.png) |
+| ![Export](images/chordwave-export.png) | |
 
-1. **Start**: pick a genre, a key and a mood, or begin from a ready-made progression for the genre (written in
-   your key, with an explanation of why it works). Picking a genre also sets the tempo and sensible chord and
-   bass styles; nothing is locked to it.
+1. **Start**: pick a genre, a key and a mood. The key is explained ("the home note of your song") and a live
+   line shows its notes and home chord. All ten scales are listed with how they feel (dark and warm, dreamy,
+   exotic...). Or begin from a ready-made progression for the genre, written in your key, with an explanation
+   of why it works. Picking a genre also sets the tempo and sensible patterns; nothing is locked to it.
 2. **Chords**: your progression as large blocks. Below it, the seven chords of your key (Simple, 7ths, 9ths,
    Add 9 or Sus): click to hear, **+** to add. *Chords from* lets you borrow from a neighbouring key (circle of
    fifths) or another mode. *What could come next* ranks the chords that fit after the selected one and says
@@ -159,11 +161,16 @@ the top right.
    (verse, chorus...) can be duplicated, and the melody moves with the chords.
 3. **Melody**: a big piano roll with numbered bars, beats, labelled rows and the chords above it. By default
    only the notes of your key are shown, so every note you place fits (switch to *All notes* any time). Notes
-   are coloured: fits the chord, passing note, outside the key. **Generate a melody** writes a hook with chord
-   tones on the strong beats, steps in between, a repeating rhythm and a resolving end; *Busy* sets how many
-   notes.
-4. **Sound**: how the chords (pads, pulses, stabs, gated 16ths, arpeggios), the bass (sustained, 8ths,
-   two-step, rolling...) and the drums play, with the built-in sound for listening and optional MIDI out.
+   are coloured: fits the chord, passing note, outside the key. Adding a note pulses, removing one fades out
+   with a message, and a note has a hover **x** to delete it. The wheel scrolls up and down (Shift + wheel
+   sideways) and there are scrollbars. Six generate **styles**, each explained: *Hook* (a singable tune),
+   *Riff* (one pattern repeated on every chord), *Arpeggio*, *Long notes*, *Call & answer*, and *Re-pitch mine*
+   (keeps the rhythm you drew and picks new notes). *Busy* sets how many notes.
+4. **Sound**: one part at a time (Chords, Bass, Drums, Melody). Choose how it plays and what it sounds like;
+   hovering any option explains it. Chords have 7 patterns and 5 sounds, the bass 7 patterns and 3 sounds,
+   the melody 4 sounds, and each part has a level and a mute. **Drums** are played by a built-in kit (kick,
+   snare, clap, hats, toms, cymbal) with 8 patterns from Neon Break (or *Auto* for the genre) and fills at the
+   end of each section.
 5. **Export**: drag a block into your DAW, see below.
 
 **Getting it into your DAW**
@@ -189,8 +196,8 @@ the top right.
 - **Quick export to folder** writes every file into `Documents/Chordwave` and opens the folder.
 - **Import MIDI** loads a file (a melody, a bass line, a chord part) to set it as the melody or to detect its
   chords bar by bar, and suggests the key.
-- **MIDI out**: the plugin sends its notes to the host (chords on channel 1, bass on 2, melody on 3), so they
-  can be routed to any instrument. How plugin MIDI output is exposed differs between hosts; if yours cannot do
+- **MIDI out**: the plugin sends its notes to the host (chords on channel 1, bass on 2, melody on 3, drums on
+  channel 10, the General MIDI drum channel that Neon Break understands), so they can be routed to any instrument. How plugin MIDI output is exposed differs between hosts; if yours cannot do
   it, use the blocks.
 - **Keyboard**: set *Keyboard* to *Chords* and a single key plays the diatonic chord built on it (notes outside
   the scale are ignored): a quick way to jam ideas in key. Playback follows the host transport, or the PLAY

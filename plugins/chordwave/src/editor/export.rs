@@ -59,7 +59,7 @@ pub fn midi_bytes(cx: &Cx, which: Which, drum_keys: bool) -> Option<Vec<u8>> {
     }
     if which == Which::Drums {
         let mode = if drum_keys { DrumMode::PatternKeys } else { DrumMode::Notes };
-        add(if drum_keys { "Neon Break keys" } else { "Drums" }, if drum_keys { 0 } else { 9 }, render_drums(&cx.project, cx.genre, mode));
+        add(if drum_keys { "Neon Break keys" } else { "Drums" }, if drum_keys { 0 } else { 9 }, render_drums(&cx.project, cx.genre, mode, cx.cfg.drum_pattern, cx.cfg.drum_fills));
     }
     let mut markers = Vec::new();
     let mut t = 0.0;

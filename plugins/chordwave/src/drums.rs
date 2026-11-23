@@ -26,6 +26,7 @@ pub enum DrumMode {
 
 pub struct DrumPattern {
     pub name: &'static str,
+    pub blurb: &'static str,
     /// Slot (0-based) this pattern has in Neon Break's default bank.
     pub slot: u8,
     pub rows: [&'static str; 8],
@@ -35,14 +36,14 @@ const NONE: &str = "................";
 
 /// The patterns of Neon Break's default bank that Chordwave uses.
 pub const PATTERNS: [DrumPattern; 8] = [
-    DrumPattern { name: "Two-Step", slot: 0, rows: ["X.........X.....", "....X.......X...", NONE, "x.x.x.x.x.x.x.x.", NONE, NONE, NONE, NONE] },
-    DrumPattern { name: "Roller", slot: 1, rows: ["X.........X.....", "....X..g.g..X..g", NONE, "x.xxx.xxx.xxx.xx", "......x.......x.", NONE, NONE, NONE] },
-    DrumPattern { name: "Dancefloor", slot: 4, rows: ["X.....X...X.....", "....X.......X...", "....X.......X...", "x.x.x.x.x.x.x.x.", "..............x.", NONE, NONE, NONE] },
-    DrumPattern { name: "Liquid", slot: 5, rows: ["X.........X.....", "....X.......X...", NONE, "x.xgx.xgx.xgx.xg", NONE, NONE, NONE, "x...x...x...x..."] },
-    DrumPattern { name: "Neon Chase", slot: 8, rows: ["X.....X...X.....", "....!.......!...", "....X.......X...", "x.xxx.xxx.xxx.xx", NONE, ".......x........", "..............xX", NONE] },
-    DrumPattern { name: "Half Backbeat", slot: 9, rows: ["X.......X.X.....", "....X.......X...", "....X.......X...", "x.x.x.x.x.x.x.x.", "..............x.", NONE, NONE, NONE] },
-    DrumPattern { name: "Outrun", slot: 10, rows: ["X...X...X...X...", "....!.......!...", "....X.......X...", "x.x.x.x.x.x.x.x.", "..x...x...x...x.", NONE, NONE, NONE] },
-    DrumPattern { name: "Breakdown", slot: 11, rows: ["X...............", "........X.......", NONE, "x...x...x...x...", NONE, NONE, NONE, "!..............."] },
+    DrumPattern { name: "Two-Step", blurb: "Classic drum and bass: kick on 1 and the 'and' of 2, snare on 2 and 4, lots of space.", slot: 0, rows: ["X.........X.....", "....X.......X...", NONE, "x.x.x.x.x.x.x.x.", NONE, NONE, NONE, NONE] },
+    DrumPattern { name: "Roller", blurb: "Rolling hats and ghost snares keep the energy flowing without big gaps.", slot: 1, rows: ["X.........X.....", "....X..g.g..X..g", NONE, "x.xxx.xxx.xxx.xx", "......x.......x.", NONE, NONE, NONE] },
+    DrumPattern { name: "Dancefloor", blurb: "Extra kick and a clap on the backbeat: a club-friendly drum and bass groove.", slot: 4, rows: ["X.....X...X.....", "....X.......X...", "....X.......X...", "x.x.x.x.x.x.x.x.", "..............x.", NONE, NONE, NONE] },
+    DrumPattern { name: "Liquid", blurb: "Soft and smooth: gentle hats and a cymbal shimmer. Pairs with 9th chords.", slot: 5, rows: ["X.........X.....", "....X.......X...", NONE, "x.xgx.xgx.xgx.xg", NONE, NONE, NONE, "x...x...x...x..."] },
+    DrumPattern { name: "Neon Chase", blurb: "Busy and bright: accents, toms and open hats. Good for a chorus.", slot: 8, rows: ["X.....X...X.....", "....!.......!...", "....X.......X...", "x.xxx.xxx.xxx.xx", NONE, ".......x........", "..............xX", NONE] },
+    DrumPattern { name: "Half Backbeat", blurb: "Slow, steady backbeat with a clap: a synthwave and pop basic.", slot: 9, rows: ["X.......X.X.....", "....X.......X...", "....X.......X...", "x.x.x.x.x.x.x.x.", "..............x.", NONE, NONE, NONE] },
+    DrumPattern { name: "Outrun", blurb: "Driving four-on-the-floor kick with a big snare: the classic synthwave drum sound.", slot: 10, rows: ["X...X...X...X...", "....!.......!...", "....X.......X...", "x.x.x.x.x.x.x.x.", "..x...x...x...x.", NONE, NONE, NONE] },
+    DrumPattern { name: "Breakdown", blurb: "Sparse: just a few hits. For intros, breakdowns and quiet sections.", slot: 11, rows: ["X...............", "........X.......", NONE, "x...x...x...x...", NONE, NONE, NONE, "!..............."] },
 ];
 
 fn pattern_by_slot(slot: u8) -> &'static DrumPattern {
@@ -72,7 +73,12 @@ pub fn fill_key(genre: Genre) -> u8 {
     }
 }
 
-pub fn pattern_for(genre: Genre, section: usize) -> &'static DrumPattern {
+/// The pattern for a section: the user's choice (an index into `PATTERNS`), or the genre's own
+/// pair of patterns, alternating between sections.
+pub fn pattern_for(genre: Genre, section: usize, choice: Option<usize>) -> &'static DrumPattern {
+    if let Some(i) = choice {
+        return &PATTERNS[i.min(PATTERNS.len() - 1)];
+    }
     let (a, b) = slots_for(genre);
     pattern_by_slot(if section % 2 == 0 { a } else { b })
 }
@@ -89,7 +95,7 @@ fn velocity(ch: u8) -> Option<u8> {
 }
 
 /// Render the drum part for the whole sketch.
-pub fn render_drums(project: &Project, genre: Genre, mode: DrumMode) -> Vec<Note> {
+pub fn render_drums(project: &Project, genre: Genre, mode: DrumMode, choice: Option<usize>, fills: bool) -> Vec<Note> {
     let mut out = Vec::new();
     let mut start = 0.0f32;
     for (si, section) in project.sections.iter().enumerate() {
@@ -97,9 +103,9 @@ pub fn render_drums(project: &Project, genre: Genre, mode: DrumMode) -> Vec<Note
         if beats <= 0.0 {
             continue;
         }
-        let pattern = pattern_for(genre, si);
+        let pattern = pattern_for(genre, si, choice);
         let bars = (beats / BEATS_PER_BAR).ceil().max(1.0) as usize;
-        let fill = bars >= 2;
+        let fill = fills && bars >= 2;
         match mode {
             DrumMode::PatternKeys => {
                 let main_len = if fill { beats - BEATS_PER_BAR } else { beats };
@@ -175,7 +181,7 @@ mod tests {
     #[test]
     fn pattern_keys_play_the_slot_and_end_with_a_fill() {
         let p = sketch(&[16.0, 8.0]);
-        let n = render_drums(&p, Genre::Synthwave, DrumMode::PatternKeys);
+        let n = render_drums(&p, Genre::Synthwave, DrumMode::PatternKeys, None, true);
         // section A: Outrun (slot 11 -> key 82) for 3 bars then a tom fill (62) over the last bar
         assert_eq!(n[0], Note::new(0.0, 12.0, 82, 100));
         assert_eq!(n[1], Note::new(12.0, 4.0, 62, 100));
@@ -187,13 +193,13 @@ mod tests {
 
     #[test]
     fn a_one_bar_section_has_no_fill() {
-        let n = render_drums(&sketch(&[4.0]), Genre::DrumAndBass, DrumMode::PatternKeys);
+        let n = render_drums(&sketch(&[4.0]), Genre::DrumAndBass, DrumMode::PatternKeys, None, true);
         assert_eq!(n, vec![Note::new(0.0, 4.0, 72, 100)]); // Two-Step = slot 1
     }
 
     #[test]
     fn drum_notes_follow_the_pattern() {
-        let n = render_drums(&sketch(&[8.0]), Genre::DrumAndBass, DrumMode::Notes);
+        let n = render_drums(&sketch(&[8.0]), Genre::DrumAndBass, DrumMode::Notes, None, true);
         // Two-Step bar 1: kick on step 0 and 10, snare on step 4 and 12; bar 2 ends in a snare roll
         let kicks: Vec<f32> = n.iter().filter(|x| x.pitch == 36).map(|x| x.start).collect();
         assert_eq!(kicks, vec![0.0, 2.5, 4.0, 6.5]);
@@ -206,13 +212,25 @@ mod tests {
 
     #[test]
     fn later_sections_start_with_a_crash() {
-        let n = render_drums(&sketch(&[8.0, 8.0]), Genre::Synthwave, DrumMode::Notes);
+        let n = render_drums(&sketch(&[8.0, 8.0]), Genre::Synthwave, DrumMode::Notes, None, true);
         assert!(n.iter().any(|x| x.pitch == 49 && x.start == 8.0));
         assert!(!n.iter().any(|x| x.pitch == 49 && x.start == 0.0));
     }
 
     #[test]
+    fn a_chosen_pattern_and_the_fills_switch_are_respected() {
+        let p = sketch(&[16.0, 8.0]);
+        // choice 6 = Outrun (slot 11 -> key 82) in every section, no fills
+        let n = render_drums(&p, Genre::DrumAndBass, DrumMode::PatternKeys, Some(6), false);
+        assert_eq!(n, vec![Note::new(0.0, 16.0, 82, 100), Note::new(16.0, 8.0, 82, 100)]);
+        let n = render_drums(&p, Genre::DrumAndBass, DrumMode::Notes, Some(6), false);
+        assert!(n.iter().all(|x| x.start < 24.0));
+        // no snare roll without fills
+        assert!(!n.iter().any(|x| x.pitch == 38 && (x.start - 15.25).abs() < 0.01));
+    }
+
+    #[test]
     fn empty_sketch_makes_no_drums() {
-        assert!(render_drums(&Project::default(), Genre::Any, DrumMode::Notes).is_empty());
+        assert!(render_drums(&Project::default(), Genre::Any, DrumMode::Notes, None, true).is_empty());
     }
 }

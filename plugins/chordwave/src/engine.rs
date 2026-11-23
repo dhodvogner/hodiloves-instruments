@@ -26,8 +26,8 @@ pub struct Playback {
 
 pub fn build_playback(project: &Project, cfg: &RenderCfg) -> Playback {
     let r = render(project, cfg);
-    let mut notes: Vec<RNote> = Vec::with_capacity(r.chords.len() + r.bass.len() + r.melody.len());
-    for (part, list) in [(0u8, &r.chords), (1, &r.bass), (2, &r.melody)] {
+    let mut notes: Vec<RNote> = Vec::with_capacity(r.chords.len() + r.bass.len() + r.melody.len() + r.drums.len());
+    for (part, list) in [(0u8, &r.chords), (1, &r.bass), (2, &r.melody), (3, &r.drums)] {
         notes.extend(list.iter().map(|n| RNote { start: n.start, end: n.end(), pitch: n.pitch, vel: n.vel, part }));
     }
     notes.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.pitch.cmp(&b.pitch)));
@@ -131,7 +131,7 @@ impl Engine {
 
     /// Work out every note-on / note-off in a block of `n` samples starting at song position
     /// `beat0`. The result is in `self.events`, sorted by time with note-offs first.
-    pub fn process_block(&mut self, beat0: f64, n: usize, beats_per_sample: f64, playing: bool, repeat: bool, parts_on: [bool; 3]) {
+    pub fn process_block(&mut self, beat0: f64, n: usize, beats_per_sample: f64, playing: bool, repeat: bool, parts_on: [bool; 4]) {
         self.events.clear();
         if !playing || self.len <= 0.0 || n == 0 {
             if !self.active.is_empty() {
@@ -163,7 +163,7 @@ impl Engine {
             while i < self.notes.len() && (self.notes[i].start as f64) < lb + dur - 1e-6 {
                 let note = self.notes[i];
                 i += 1;
-                if !parts_on[(note.part as usize).min(2)] {
+                if !parts_on[(note.part as usize).min(3)] {
                     continue;
                 }
                 let abs_start = (seg + (note.start as f64 - lb)).max(seg);
@@ -211,9 +211,11 @@ mod tests {
     use crate::theory::*;
 
     fn engine_for(project: &Project) -> Engine {
-        let cfg = RenderCfg { key: 9, scale: Scale::Minor, chord_style: ChordStyle::Sustain, bass_style: BassStyle::Sustain, center: 60, spread: false, bass_range: (33, 45) };
+        let cfg = RenderCfg { chord_style: ChordStyle::Sustain, bass_style: BassStyle::Sustain, drum_fills: false, ..RenderCfg::new(9, Scale::Minor, Genre::Any) };
         let mut e = Engine::default();
-        e.set_playback(&build_playback(project, &cfg));
+        let mut pb = build_playback(project, &cfg);
+        pb.notes.retain(|n| n.part != 3); // these tests are about the pitched parts
+        e.set_playback(&pb);
         e
     }
 
@@ -223,7 +225,7 @@ mod tests {
         let mut out = Vec::new();
         for b in 0..blocks {
             let beat0 = start_beat + (b * 480) as f64 * bps;
-            e.process_block(beat0, 480, bps, true, repeat, [true; 3]);
+            e.process_block(beat0, 480, bps, true, repeat, [true; 4]);
             out.extend(e.events.iter().map(|ev| ((b * 480) as u64 + ev.offset as u64, *ev)));
         }
         out
@@ -268,7 +270,7 @@ mod tests {
         let mut e = engine_for(&p);
         run(&mut e, 0.0, 10, true);
         assert!(e.has_active());
-        e.process_block(0.0, 480, 1e-4, false, true, [true; 3]);
+        e.process_block(0.0, 480, 1e-4, false, true, [true; 4]);
         assert!(e.events.iter().all(|ev| !ev.on) && !e.events.is_empty());
         assert!(!e.has_active());
     }
@@ -279,7 +281,7 @@ mod tests {
         let mut e = engine_for(&p);
         run(&mut e, 0.0, 10, true);
         let bps = 2.0 / 48_000.0;
-        e.process_block(8.0, 480, bps, true, true, [true; 3]);
+        e.process_block(8.0, 480, bps, true, true, [true; 4]);
         assert!(e.events.iter().any(|ev| !ev.on && ev.offset == 0));
         assert!(e.events.iter().any(|ev| ev.on && ev.offset == 0)); // chord 3 begins at beat 8
     }
@@ -292,15 +294,31 @@ mod tests {
         let ons = evs.iter().filter(|(_, ev)| ev.on).count();
         assert_eq!(ons, 16); // 4 chords x (3 notes + bass), once
         let mut e = engine_for(&p);
-        e.process_block(0.0, 480, 1e-4, true, true, [false, true, false]);
+        e.process_block(0.0, 480, 1e-4, true, true, [false, true, false, false]);
         assert!(e.events.iter().all(|ev| ev.part == 1));
+    }
+
+    #[test]
+    fn drums_are_part_three_and_can_be_muted() {
+        let p = starter();
+        let cfg = RenderCfg::new(9, Scale::Minor, Genre::DrumAndBass);
+        let pb = build_playback(&p, &cfg);
+        assert!(pb.notes.iter().any(|n| n.part == 3));
+        let mut e = Engine::default();
+        e.set_playback(&pb);
+        e.process_block(0.0, 480, 1e-4, true, true, [true, true, true, false]);
+        assert!(e.events.iter().all(|ev| ev.part != 3));
+        let mut e = Engine::default();
+        e.set_playback(&pb);
+        e.process_block(0.0, 480, 1e-4, true, true, [false, false, false, true]);
+        assert!(!e.events.is_empty() && e.events.iter().all(|ev| ev.part == 3));
     }
 
     #[test]
     fn short_notes_never_turn_off_before_they_turn_on() {
         let mut p = Project::default();
         p.push_chord(Chord::new(0, Quality::Maj), 4.0);
-        let cfg = RenderCfg { key: 0, scale: Scale::Major, chord_style: ChordStyle::ArpUp, bass_style: BassStyle::Rolling, center: 60, spread: false, bass_range: (28, 40) };
+        let cfg = RenderCfg { chord_style: ChordStyle::ArpUp, bass_style: BassStyle::Rolling, ..RenderCfg::new(0, Scale::Major, Genre::DrumAndBass) };
         let mut e = Engine::default();
         e.set_playback(&build_playback(&p, &cfg));
         // huge blocks relative to the note length
@@ -308,7 +326,7 @@ mod tests {
         let mut count: std::collections::HashMap<(u8, u8), i32> = Default::default();
         let mut beat = 0.0;
         for _ in 0..200 {
-            e.process_block(beat, 4096, bps, true, true, [true; 3]);
+            e.process_block(beat, 4096, bps, true, true, [true; 4]);
             for ev in &e.events {
                 let c = count.entry((ev.part, ev.pitch)).or_insert(0);
                 *c += if ev.on { 1 } else { -1 };
@@ -317,7 +335,7 @@ mod tests {
             beat += 4096.0 * bps;
         }
         // after releasing everything nothing must hang
-        e.process_block(0.0, 64, bps, false, true, [true; 3]);
+        e.process_block(0.0, 64, bps, false, true, [true; 4]);
         for ev in &e.events {
             *count.entry((ev.part, ev.pitch)).or_insert(0) += if ev.on { 1 } else { -1 };
         }

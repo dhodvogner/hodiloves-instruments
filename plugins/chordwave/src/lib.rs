@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 pub mod dragout;
 pub mod drums;
+pub mod drumsynth;
 pub mod editor;
 pub mod engine;
 pub mod generate;
@@ -27,7 +28,7 @@ use engine::{build_playback, Engine, Ev, Playback};
 use params::ChordwaveParams;
 use plugin_common::dsp::soft_clip;
 use plugin_common::midi::{decode, KeyState, MidiQueue, Msg, EXTERNAL_MIDI};
-use synth::{Synth, PART_CHORDS, PART_MELODY};
+use synth::{Synth, PART_CHORDS, PART_DRUMS, PART_MELODY};
 use theory::*;
 
 /// State shared between the audio thread and the editor.
@@ -78,6 +79,8 @@ struct Sig {
     bass_style: i32,
     spread: bool,
     octave: i32,
+    drum_pattern: i32,
+    drum_fills: bool,
 }
 
 impl Sig {
@@ -91,6 +94,8 @@ impl Sig {
             bass_style: p.bass_style.value(),
             spread: p.spread.value(),
             octave: p.octave.value(),
+            drum_pattern: p.drum_pattern.value(),
+            drum_fills: p.drum_fills.value(),
         }
     }
 }
@@ -103,6 +108,11 @@ fn rebuild(params: &ChordwaveParams, shared: &Shared) {
         *slot = built;
     }
     shared.playback_version.fetch_add(1, Ordering::AcqRel);
+}
+
+/// MIDI channel of a part: chords 1, bass 2, melody 3 and the drums on channel 10 (General MIDI drums).
+fn midi_channel(part: u8) -> u8 {
+    if part == PART_DRUMS { 9 } else { part }
 }
 
 #[derive(Clone, Copy)]
@@ -301,7 +311,7 @@ impl Plugin for Chordwave {
             _ => (false, 0.0, false),
         };
         let repeat = p.repeat.value();
-        let parts = [p.chords_on.value(), p.bass_on.value(), p.melody_on.value()];
+        let parts = [p.chords_on.value(), p.bass_on.value(), p.melody_on.value(), p.drums_on.value()];
         self.engine.process_block(beat0, n, bps, playing, repeat, parts);
         if playing && !from_host {
             self.engine.internal_beat += n as f64 * bps;
@@ -339,8 +349,8 @@ impl Plugin for Chordwave {
         // Render audio between the events and send MIDI out.
         let internal_sound = p.internal.value();
         let midi_out = p.midi_out.value();
-        let sound = p.sound.value().max(0) as usize;
-        let gains = [p.chords_vol.value(), p.bass_vol.value(), p.melody_vol.value()];
+        let sounds = [p.sound.value().max(0) as usize, p.bass_sound.value().max(0) as usize, p.melody_sound.value().max(0) as usize, 0];
+        let gains = [p.chords_vol.value(), p.bass_vol.value(), p.melody_vol.value(), p.drums_vol.value()];
         let channels = buffer.as_slice();
         let (first, rest) = channels.split_at_mut(1);
         let (out_l, out_r) = (&mut *first[0], &mut *rest[0]);
@@ -357,13 +367,13 @@ impl Plugin for Chordwave {
             }
             if ev.on {
                 if internal_sound {
-                    self.synth.note_on(ev.pitch, ev.part, sound, ev.vel);
+                    self.synth.note_on(ev.pitch, ev.part, sounds[(ev.part as usize).min(3)], ev.vel);
                 }
                 if midi_out {
                     context.send_event(NoteEvent::NoteOn {
                         timing: t as u32,
                         voice_id: None,
-                        channel: ev.part,
+                        channel: midi_channel(ev.part),
                         note: ev.pitch,
                         velocity: ev.vel as f32 / 127.0,
                     });
@@ -371,7 +381,7 @@ impl Plugin for Chordwave {
             } else {
                 self.synth.note_off(ev.pitch, ev.part);
                 if midi_out {
-                    context.send_event(NoteEvent::NoteOff { timing: t as u32, voice_id: None, channel: ev.part, note: ev.pitch, velocity: 0.0 });
+                    context.send_event(NoteEvent::NoteOff { timing: t as u32, voice_id: None, channel: midi_channel(ev.part), note: ev.pitch, velocity: 0.0 });
                 }
             }
         }
@@ -452,7 +462,7 @@ mod integration {
         let mut rms_per_bar = [0.0f64; 4];
         let mut peak = 0.0f32;
         for _ in 0..(16.0 / bps / block as f64) as usize {
-            engine.process_block(beat, block, bps, true, false, [true; 3]);
+            engine.process_block(beat, block, bps, true, false, [true; 4]);
             l.fill(0.0);
             r.fill(0.0);
             let mut pos = 0;
@@ -477,7 +487,7 @@ mod integration {
         assert!(peak > 0.05 && peak < 4.0, "peak {peak}");
 
         // Stop: every note is released and the synth falls silent.
-        engine.process_block(0.0, block, bps, false, false, [true; 3]);
+        engine.process_block(0.0, block, bps, false, false, [true; 4]);
         for ev in engine.events.clone() {
             assert!(!ev.on);
             synth.note_off(ev.pitch, ev.part);
@@ -488,6 +498,31 @@ mod integration {
             synth.render(&mut l, &mut r, [1.0; PARTS]);
         }
         assert!(!synth.is_busy(), "voices still sounding after stop");
+    }
+
+    #[test]
+    fn drums_are_heard_and_go_out_on_the_general_midi_drum_channel() {
+        assert_eq!(midi_channel(synth::PART_CHORDS), 0);
+        assert_eq!(midi_channel(synth::PART_MELODY), 2);
+        assert_eq!(midi_channel(synth::PART_DRUMS), 9);
+        // render only the drums: the built-in kit must make sound
+        let params = ChordwaveParams::default();
+        let pb = build_playback(&starter(), &params.render_cfg());
+        let mut engine = Engine::default();
+        engine.set_playback(&pb);
+        let mut synth = Synth::new(48_000.0);
+        let bps = 2.0 / 48_000.0;
+        let (mut l, mut r) = (vec![0.0f32; 24_000], vec![0.0f32; 24_000]);
+        engine.process_block(0.0, 24_000, bps, true, true, [false, false, false, true]);
+        assert!(!engine.events.is_empty());
+        for ev in engine.events.clone() {
+            assert_eq!(ev.part, synth::PART_DRUMS);
+            if ev.on {
+                synth.note_on(ev.pitch, ev.part, 0, ev.vel);
+            }
+        }
+        synth.render(&mut l, &mut r, [0.0, 0.0, 0.0, 1.0]);
+        assert!(l.iter().fold(0.0f32, |m, x| m.max(x.abs())) > 0.05, "the drums are silent");
     }
 
     #[test]

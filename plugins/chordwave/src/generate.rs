@@ -178,6 +178,263 @@ pub fn generate_melody(project: &Project, cfg: &MelodyCfg) -> Vec<Note> {
     out
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Styles: different ways to write a melody
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MelodyStyle {
+    Hook,
+    Riff,
+    Arp,
+    Long,
+    CallResponse,
+    Repitch,
+}
+
+pub const MELODY_STYLES: [MelodyStyle; 6] =
+    [MelodyStyle::Hook, MelodyStyle::Riff, MelodyStyle::Arp, MelodyStyle::Long, MelodyStyle::CallResponse, MelodyStyle::Repitch];
+
+impl MelodyStyle {
+    pub fn name(self) -> &'static str {
+        match self {
+            MelodyStyle::Hook => "Hook",
+            MelodyStyle::Riff => "Riff",
+            MelodyStyle::Arp => "Arpeggio",
+            MelodyStyle::Long => "Long notes",
+            MelodyStyle::CallResponse => "Call & answer",
+            MelodyStyle::Repitch => "Re-pitch mine",
+        }
+    }
+
+    pub fn blurb(self) -> &'static str {
+        match self {
+            MelodyStyle::Hook => "A singable tune: chord tones on the strong beats, steps in between, a rhythm that alternates bar by bar. Different every time you press it.",
+            MelodyStyle::Riff => "One short pattern, repeated on every chord and moved to follow it. Very consistent and catchy: the classic synthwave and drum and bass riff.",
+            MelodyStyle::Arp => "Plays the notes of each chord one after another, up and back down. Predictable, flowing and always in tune with the chords.",
+            MelodyStyle::Long => "Slow, sustained notes: one or two per bar, each a chord tone. Calm and emotional, good under a vocal or for pads and cinematic parts.",
+            MelodyStyle::CallResponse => "A busy phrase in one bar, then a short answer with a long final note in the next. Feels like a conversation.",
+            MelodyStyle::Repitch => "Keeps the rhythm of your notes and picks new pitches for them. Use it after drawing a rhythm you like.",
+        }
+    }
+}
+
+/// Write a melody in the chosen style. `existing` is the current melody (used by `Repitch`).
+pub fn generate(project: &Project, cfg: &MelodyCfg, style: MelodyStyle, existing: &[Note]) -> Vec<Note> {
+    match style {
+        MelodyStyle::Hook => generate_melody(project, cfg),
+        MelodyStyle::Riff => riff(project, cfg),
+        MelodyStyle::Arp => arpeggio(project, cfg),
+        MelodyStyle::Long => long_notes(project, cfg),
+        MelodyStyle::CallResponse => call_response(project, cfg),
+        MelodyStyle::Repitch => repitch(project, cfg, existing),
+    }
+}
+
+fn pool(cfg: &MelodyCfg) -> Vec<i32> {
+    scale_notes(cfg.key, cfg.scale, cfg.lo, cfg.hi).into_iter().map(|n| n as i32).collect()
+}
+
+/// Index into `pool` of the note with pitch class `pc` closest to `target`.
+fn nearest_pc(pool: &[i32], pc: u8, target: i32) -> usize {
+    pool.iter().enumerate().filter(|(_, n)| n.rem_euclid(12) as u8 == pc).min_by_key(|(_, n)| (**n - target).abs()).map(|(i, _)| i).unwrap_or(0)
+}
+
+fn riff(project: &Project, cfg: &MelodyCfg) -> Vec<Note> {
+    let mut rng = Rng::new(cfg.seed.wrapping_mul(2654435761).wrapping_add(777));
+    let pool = pool(cfg);
+    let placed = project.placed();
+    if pool.is_empty() || placed.is_empty() {
+        return Vec::new();
+    }
+    let rhythm = pick_rhythm(cfg.genre, cfg.density, &mut rng);
+    // The pattern as steps through the scale, relative to the chord root. It starts on the root.
+    let mut motif = vec![0i32];
+    for _ in 1..rhythm.len() {
+        let prev = *motif.last().unwrap();
+        let step = match rng.next_u32() % 8 {
+            0 | 1 => -1,
+            2 | 3 => 1,
+            4 => 2,
+            5 => -2,
+            6 => 0,
+            _ => 3,
+        };
+        motif.push((prev + step).clamp(-3, 4));
+    }
+    let mid = (cfg.lo + cfg.hi) / 2;
+    let mut out = Vec::new();
+    for p in &placed {
+        let end = p.start + p.item_beats;
+        let base = nearest_pc(&pool, p.chord.root, mid) as i32;
+        let mut bar = 0.0;
+        while p.start + bar < end - 0.001 {
+            for (k, &(s16, l16)) in rhythm.iter().enumerate() {
+                let t = p.start + bar + s16 as f32 * 0.25;
+                if t >= end - 0.001 {
+                    break;
+                }
+                let idx = (base + motif[k]).clamp(0, pool.len() as i32 - 1) as usize;
+                let vel = if s16 % 4 == 0 { 100 } else { 86 };
+                out.push(Note::new(t, (l16 as f32 * 0.25).min(end - t), pool[idx] as u8, vel));
+            }
+            bar += BEATS_PER_BAR;
+        }
+    }
+    out
+}
+
+fn arpeggio(project: &Project, cfg: &MelodyCfg) -> Vec<Note> {
+    let pool = pool(cfg);
+    let placed = project.placed();
+    if pool.is_empty() || placed.is_empty() {
+        return Vec::new();
+    }
+    let step = if cfg.density < 0.34 { 1.0 } else if cfg.density < 0.67 { 0.5 } else { 0.25 };
+    let mid = (cfg.lo + cfg.hi) / 2;
+    let mut out = Vec::new();
+    for p in &placed {
+        let end = p.start + p.item_beats;
+        let pcs = p.chord.pitch_classes();
+        let tones: Vec<i32> = pool.iter().copied().filter(|n| pcs.contains(&(n.rem_euclid(12) as u8))).collect();
+        if tones.is_empty() {
+            continue;
+        }
+        // Four chord tones around the middle of the range, going up and then back down.
+        let start_i = tones.iter().position(|n| *n >= mid - 4).unwrap_or(0).min(tones.len().saturating_sub(1));
+        let up: Vec<i32> = tones.iter().copied().skip(start_i).take(4).collect();
+        let mut seq = up.clone();
+        if up.len() > 2 {
+            seq.extend(up[1..up.len() - 1].iter().rev());
+        }
+        let count = ((end - p.start) / step).round() as usize;
+        for i in 0..count {
+            let t = p.start + i as f32 * step;
+            out.push(Note::new(t, step * 0.95, seq[i % seq.len()] as u8, if i % 4 == 0 { 100 } else { 84 }));
+        }
+    }
+    out
+}
+
+fn long_notes(project: &Project, cfg: &MelodyCfg) -> Vec<Note> {
+    let mut rng = Rng::new(cfg.seed.wrapping_mul(2654435761).wrapping_add(4242));
+    let pool = pool(cfg);
+    let placed = project.placed();
+    if pool.is_empty() || placed.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<Note> = Vec::new();
+    let mut prev = (cfg.lo + cfg.hi) / 2;
+    for (ci, p) in placed.iter().enumerate() {
+        let end = p.start + p.item_beats;
+        let pcs = p.chord.pitch_classes();
+        let tones: Vec<i32> = pool.iter().copied().filter(|n| pcs.contains(&(n.rem_euclid(12) as u8))).collect();
+        if tones.is_empty() {
+            continue;
+        }
+        let mut bar = 0.0;
+        while p.start + bar < end - 0.001 {
+            let t = p.start + bar;
+            let len = (BEATS_PER_BAR).min(end - t);
+            // Nearest chord tone, with a small random preference for moving rather than repeating.
+            let mut choices: Vec<i32> = tones.clone();
+            choices.sort_by_key(|n| (n - prev).abs());
+            let pick = if rng.next_f32() < 0.4 && choices.len() > 1 { choices[1] } else { choices[0] };
+            let last_of_sketch = ci + 1 == placed.len() && t + len >= end - 0.001;
+            let pitch = if last_of_sketch {
+                *tones.iter().filter(|n| n.rem_euclid(12) as u8 == p.chord.root).min_by_key(|n| (**n - prev).abs()).unwrap_or(&pick)
+            } else {
+                pick
+            };
+            // A passing note on the last beat when it is busy enough.
+            if cfg.density > 0.55 && len >= 4.0 && !last_of_sketch {
+                let i = pool.iter().position(|n| *n == pitch).unwrap_or(0);
+                let neighbour = pool[(i + 1).min(pool.len() - 1)];
+                out.push(Note::new(t, 3.0, pitch as u8, 96));
+                out.push(Note::new(t + 3.0, 1.0, neighbour as u8, 84));
+            } else {
+                out.push(Note::new(t, len, pitch as u8, 96));
+            }
+            prev = pitch;
+            bar += BEATS_PER_BAR;
+        }
+    }
+    out
+}
+
+fn call_response(project: &Project, cfg: &MelodyCfg) -> Vec<Note> {
+    let hook = generate_melody(project, cfg);
+    let total = project.beats();
+    let mut out: Vec<Note> = Vec::new();
+    let bars = (total / BEATS_PER_BAR).ceil() as usize;
+    for bar in 0..bars {
+        let (a, b) = (bar as f32 * BEATS_PER_BAR, (bar as f32 + 1.0) * BEATS_PER_BAR);
+        let in_bar: Vec<Note> = hook.iter().filter(|n| n.start >= a - 0.001 && n.start < b - 0.001).copied().collect();
+        let is_answer = bar % 2 == 1;
+        if !is_answer || in_bar.len() < 3 {
+            out.extend(in_bar);
+            continue;
+        }
+        // The answer: a short opening note and one long closing note.
+        let first = in_bar[0];
+        let last = *in_bar.last().unwrap();
+        let close = (a + 2.0).max(last.start);
+        let end_limit = project.chord_at(close).map_or(b, |p| (p.start + p.item_beats).min(b));
+        out.push(Note::new(first.start, (close - first.start).min(first.len.max(0.5)).min(1.5), first.pitch, first.vel));
+        out.push(Note::new(close, (end_limit - close).max(0.25), last.pitch, last.vel));
+    }
+    out
+}
+
+fn repitch(project: &Project, cfg: &MelodyCfg, existing: &[Note]) -> Vec<Note> {
+    if existing.is_empty() {
+        return generate_melody(project, cfg);
+    }
+    let mut rng = Rng::new(cfg.seed.wrapping_mul(2654435761).wrapping_add(9001));
+    let pool = pool(cfg);
+    if pool.is_empty() {
+        return Vec::new();
+    }
+    let mut notes = existing.to_vec();
+    notes.sort_by(|a, b| a.start.total_cmp(&b.start));
+    let mut idx = pool.iter().position(|n| *n >= (cfg.lo + cfg.hi) / 2).unwrap_or(0);
+    let mut out: Vec<Note> = Vec::new();
+    let count = notes.len();
+    for (i, n) in notes.iter().enumerate() {
+        let chord = project.chord_at(n.start + 0.001).map(|p| p.chord);
+        let strong = (n.start % 1.0).abs() < 0.001;
+        let mut target = (idx as i32 + [-2, -1, -1, 0, 1, 1, 2][(rng.next_u32() % 7) as usize]).clamp(0, pool.len() as i32 - 1) as usize;
+        let forbidden = match out.as_slice() {
+            [.., a, b] if a.pitch == b.pitch => Some(b.pitch as i32),
+            _ => None,
+        };
+        let last = i + 1 == count;
+        if let Some(c) = chord.filter(|_| strong || last) {
+            let pcs = c.pitch_classes();
+            let want_root = last;
+            let best = (-4i32..=4)
+                .filter_map(|d| {
+                    let j = target as i32 + d;
+                    (j >= 0 && (j as usize) < pool.len()).then_some((d, j as usize))
+                })
+                .filter(|(_, j)| {
+                    let pc = pool[*j].rem_euclid(12) as u8;
+                    Some(pool[*j]) != forbidden && if want_root { pc == c.root } else { pcs.contains(&pc) }
+                })
+                .min_by_key(|(d, _)| d.abs());
+            if let Some((_, j)) = best {
+                target = j;
+            }
+        } else if Some(pool[target]) == forbidden {
+            target = if target + 1 < pool.len() { target + 1 } else { target.saturating_sub(1) };
+        }
+        idx = target;
+        out.push(Note::new(n.start, n.len, pool[idx] as u8, n.vel));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,6 +488,57 @@ mod tests {
         let c = generate_melody(&p, &cfg(Genre::Synthwave, 2));
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn every_style_writes_a_valid_melody_in_every_genre() {
+        for style in MELODY_STYLES {
+            for genre in GENRES {
+                for seed in 0..8 {
+                    let p = starter();
+                    let c = cfg(genre, seed);
+                    let existing = generate_melody(&p, &c);
+                    let m = generate(&p, &c, style, &existing);
+                    assert!(!m.is_empty(), "{style:?} {genre:?}");
+                    for n in &m {
+                        assert!((60..=84).contains(&(n.pitch as i32)), "{style:?} {n:?}");
+                        assert!(in_scale(9, Scale::Minor, n.pitch % 12), "{style:?} {n:?}");
+                        assert!(n.len > 0.0 && n.end() <= 16.001 && n.start >= 0.0, "{style:?} {n:?}");
+                    }
+                    for w in m.windows(2) {
+                        assert!(w[1].start >= w[0].end() - 0.001, "{style:?} {genre:?} overlap {w:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn styles_have_their_character() {
+        let p = starter();
+        let c = cfg(Genre::Synthwave, 3);
+        // riff: the same rhythm in every bar
+        let riff = generate(&p, &c, MelodyStyle::Riff, &[]);
+        let bar_rhythm = |bar: f32| riff.iter().filter(|n| n.start >= bar * 4.0 && n.start < bar * 4.0 + 4.0).map(|n| n.start - bar * 4.0).collect::<Vec<_>>();
+        assert_eq!(bar_rhythm(0.0), bar_rhythm(1.0));
+        assert_eq!(bar_rhythm(1.0), bar_rhythm(3.0));
+        // arpeggio: only chord tones
+        let arp = generate(&p, &c, MelodyStyle::Arp, &[]);
+        for n in &arp {
+            let chord = p.chord_at(n.start + 0.001).unwrap().chord;
+            assert!(chord.contains_pc(n.pitch % 12), "{n:?} over {}", chord.name(false));
+        }
+        // long notes: few notes, all chord tones on bar starts
+        let long = generate(&p, &c, MelodyStyle::Long, &[]);
+        assert!(long.len() <= 8, "{}", long.len());
+        // re-pitch keeps every start and length
+        let mine = vec![Note::new(0.0, 1.0, 69, 100), Note::new(1.5, 0.5, 72, 90), Note::new(4.0, 2.0, 65, 100)];
+        let re = generate(&p, &c, MelodyStyle::Repitch, &mine);
+        assert_eq!(re.iter().map(|n| (n.start, n.len)).collect::<Vec<_>>(), mine.iter().map(|n| (n.start, n.len)).collect::<Vec<_>>());
+        // call and answer: answer bars have at most two notes
+        let ca = generate(&p, &c, MelodyStyle::CallResponse, &[]);
+        let answer: Vec<_> = ca.iter().filter(|n| n.start >= 4.0 && n.start < 8.0).collect();
+        assert!(answer.len() <= 2 || answer.len() < 4, "{answer:?}");
     }
 
     #[test]

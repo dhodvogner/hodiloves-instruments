@@ -73,6 +73,12 @@ pub struct State {
     pub undo_melody: Option<Vec<Note>>,
     /// Drums are exported as Neon Break pattern keys (true) or as plain drum notes (false).
     pub drum_keys: bool,
+    /// How the melody generator writes (see `generate::MelodyStyle`).
+    pub melody_style: crate::generate::MelodyStyle,
+    /// Short-lived animations in the piano roll (a note was added or removed).
+    pub fx: Vec<melody::Fx>,
+    /// Which part the Sound step is showing: 0 chords, 1 bass, 2 drums, 3 melody.
+    pub sound_part: usize,
 }
 
 impl Default for State {
@@ -97,6 +103,9 @@ impl Default for State {
             message: None,
             undo_melody: None,
             drum_keys: true,
+            melody_style: crate::generate::MelodyStyle::Hook,
+            fx: Vec::new(),
+            sound_part: 0,
         }
     }
 }

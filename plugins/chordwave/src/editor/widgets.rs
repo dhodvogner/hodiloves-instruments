@@ -256,13 +256,17 @@ pub fn short_reason(reason: &str) -> String {
     out
 }
 
-/// A vertical list of radio options. Returns the index clicked.
-pub fn radio_list(ui: &mut Ui, rect: Rect, id: &str, options: &[&str], selected: usize, color: Color32) -> Option<usize> {
+/// A vertical list of radio options. Returns (index clicked, index hovered).
+pub fn radio_list(ui: &mut Ui, rect: Rect, id: &str, options: &[&str], selected: usize, color: Color32) -> (Option<usize>, Option<usize>) {
     let row_h = rect.height() / options.len().max(1) as f32;
     let mut picked = None;
+    let mut hovered = None;
     for (i, name) in options.iter().enumerate() {
         let r = Rect::from_min_size(pos2(rect.left(), rect.top() + i as f32 * row_h), vec2(rect.width(), row_h)).shrink2(vec2(0.0, 1.5));
         let resp = ui.interact(r, Id::new(("radio", id, i)), Sense::click());
+        if resp.hovered() {
+            hovered = Some(i);
+        }
         let on = i == selected;
         if on {
             ui.painter().rect_filled(r, 8.0, color.gamma_multiply(0.18));
@@ -279,7 +283,7 @@ pub fn radio_list(ui: &mut Ui, rect: Rect, id: &str, options: &[&str], selected:
             picked = Some(i);
         }
     }
-    picked
+    (picked, hovered)
 }
 
 /// An on / off switch row bound to a plain bool (returns the new value when clicked).
