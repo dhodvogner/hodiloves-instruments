@@ -2,12 +2,13 @@
 #   plugins/remedy      - Remedy wavetable synthesizer
 #   plugins/wubmachine  - Wub Machine wobble-bass synthesizer
 #   plugins/neonbreak   - Neon Break drum machine
+#   plugins/chordwave   - Chordwave chord / bass / melody sketching tool
 #   crates/common      - shared DSP helpers and egui widgets
 #   xtask               - `cargo xtask bundle <plugin> --release`
 
 [workspace]
 resolver = "2"
-members = ["plugins/remedy", "plugins/wubmachine", "plugins/neonbreak", "crates/common", "xtask"]
+members = ["plugins/remedy", "plugins/wubmachine", "plugins/neonbreak", "plugins/chordwave", "crates/common", "xtask"]
 
 [workspace.dependencies]
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
