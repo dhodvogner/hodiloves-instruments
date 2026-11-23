@@ -9,8 +9,8 @@ use nih_plug::prelude::*;
 use nih_plug_egui::EguiState;
 use std::sync::Arc;
 
-pub const EDITOR_W: u32 = 1200;
-pub const EDITOR_H: u32 = 860;
+pub const EDITOR_W: u32 = 1120;
+pub const EDITOR_H: u32 = 800;
 
 fn names_param(name: &str, default: i32, names: &'static [&'static str]) -> IntParam {
     IntParam::new(name, default, IntRange::Linear { min: 0, max: names.len() as i32 - 1 })

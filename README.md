@@ -39,7 +39,7 @@ drum bus and a separate kick output for sidechaining. Details are further down. 
 
 ![Chordwave](images/chordwave.png)
 
-A songwriting helper in the spirit of chord-palette tools. Pick a key and scale and Chordwave shows only
+A guided, five-step songwriting helper in the spirit of chord-palette tools. Pick a key and scale and Chordwave shows only
 the chords that belong there, colour-coded and explained. Build a progression by dragging chords into a
 sequence, let the suggestion engine tell you what could come next **and why**, generate a bassline and a
 melody that follow the chords, then get it all into your DAW as a MIDI file (or as live MIDI). Details are
@@ -141,39 +141,41 @@ Chordwave is a sketchpad, not a sound source: it writes the notes (chords, bass,
 get them into the instruments you already use. It has a small built-in synth so you can hear ideas
 immediately.
 
-**Workflow**: choose key, scale and genre, then
+It walks you through five steps (the buttons at the top, and Back / Next at the bottom). Play is always in
+the top right.
 
-1. **Palette**: every chord of the key as a grid (triads, 7ths, 9ths, sus2, sus4, add9). Green is major-ish,
-   purple is minor-ish, grey is everything else (sus, diminished, augmented). A filled dot means the chord is
-   fully inside the key, a hollow dot means it borrows a note. Click to listen, double-click to add, or drag
-   it onto the sequence. *Adjacent keys* steps along the circle of fifths (more steps = more exotic chords),
-   *Parallel mode* borrows from another mode on the same tonic (modal interchange).
-2. **Ideas**: *Next chord* ranks what could follow the selected chord and gives the music-theory reason
-   (root motion, notes in common, tension and release, typical moves of the chosen genre). *Match melody*
-   lists the chords that fit your melody notes, guesses the key, and can re-harmonise the whole sketch around
-   a melody. *Progressions* has ready-made loops for synthwave, drum and bass, liquid, pop, cinematic, lo-fi and
-   trance, written in your key, each with an explanation of why it works.
-3. **Sequence**: chords as blocks in sections (verse, chorus...). Drag to reorder, drag the right edge to change
-   the length, set the inversion (or let it pick the smoothest voice leading) and a slash bass note. Duplicate
-   a section to repeat it. The melody moves with the chords when you insert, delete or resize them.
-4. **Piano roll**: draw the melody on top of the harmony. Scale notes are lit, the chord tones of the chord
-   under each note glow, and every note is coloured: chord tone, scale tone or outside the scale. **Generate**
-   writes a hook with chord tones on the strong beats, stepwise motion in between, a repeating rhythm and a
-   resolving end (density and register are adjustable); *Snap to key* fixes stray notes.
-5. **Parts**: the chords can be played as held pads, 8th pulses, offbeat or syncopated stabs, gated 16ths or
-   arpeggios; the bass as sustained roots, driving 8ths, octave bounce, offbeat roots or drum and bass
-   two-step and rolling patterns. Picking a genre sets sensible defaults, nothing is locked.
+| | |
+|---|---|
+| ![Start](images/chordwave-start.png) | ![Chords](images/chordwave-chords.png) |
+| ![Melody](images/chordwave.png) | ![Export](images/chordwave-export.png) |
+
+1. **Start**: pick a genre, a key and a mood, or begin from a ready-made progression for the genre (written in
+   your key, with an explanation of why it works). Picking a genre also sets the tempo and sensible chord and
+   bass styles; nothing is locked to it.
+2. **Chords**: your progression as large blocks. Below it, the seven chords of your key (Simple, 7ths, 9ths,
+   Add 9 or Sus): click to hear, **+** to add. *Chords from* lets you borrow from a neighbouring key (circle of
+   fifths) or another mode. *What could come next* ranks the chords that fit after the selected one and says
+   why in plain words. Select a block to move it, lengthen it, set its voicing or a slash bass note; sections
+   (verse, chorus...) can be duplicated, and the melody moves with the chords.
+3. **Melody**: a big piano roll with numbered bars, beats, labelled rows and the chords above it. By default
+   only the notes of your key are shown, so every note you place fits (switch to *All notes* any time). Notes
+   are coloured: fits the chord, passing note, outside the key. **Generate a melody** writes a hook with chord
+   tones on the strong beats, steps in between, a repeating rhythm and a resolving end; *Busy* sets how many
+   notes.
+4. **Sound**: how the chords (pads, pulses, stabs, gated 16ths, arpeggios), the bass (sustained, 8ths,
+   two-step, rolling...) and the drums play, with the built-in sound for listening and optional MIDI out.
+5. **Export**: drag a block into your DAW, see below.
 
 **Getting it into your DAW**
 
-- **Drag a pad into the piano roll.** The *To your DAW* panel has five pads. Pick one up and drop it on a
+- **Drag a block into the piano roll.** The *Export* step has five blocks. Pick one up and drop it on a
   channel's piano roll, a channel or the Playlist (in FL Studio, onto the piano roll of the instrument that
-  should play it). A click on a pad saves the file instead. Dragging works on **Windows** (it is the same file
-  drag as from Explorer); on other systems the pads save a file. It is untested in a real FL Studio here:
+  should play it). A click on a block saves the file instead. Dragging works on **Windows** (it is the same file
+  drag as from Explorer); on other systems the blocks save a file. It is untested in a real FL Studio here:
   if a drop does nothing in your host, use *Quick export* and drag the file from the folder.
-- **Shortcuts for the instruments of this pack**: each pad is shaped for one of them.
+- **Shortcuts for the instruments of this pack**: each block is shaped for one of them.
 
-  | Pad | Made for | What is in the file |
+  | Block | Made for | What is in the file |
   |---|---|---|
   | CHORDS | Remedy | the chord part (chord style, voicing, octave), polyphonic |
   | BASS | Wub Machine | the bass line, one note at a time, in the genre's bass range |
@@ -189,7 +191,7 @@ immediately.
   chords bar by bar, and suggests the key.
 - **MIDI out**: the plugin sends its notes to the host (chords on channel 1, bass on 2, melody on 3), so they
   can be routed to any instrument. How plugin MIDI output is exposed differs between hosts; if yours cannot do
-  it, use the pads.
+  it, use the blocks.
 - **Keyboard**: set *Keyboard* to *Chords* and a single key plays the diatonic chord built on it (notes outside
   the scale are ignored): a quick way to jam ideas in key. Playback follows the host transport, or the PLAY
   button.

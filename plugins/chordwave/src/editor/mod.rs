@@ -1,15 +1,13 @@
-//! egui editor for Chordwave.
+//! egui editor for Chordwave: a guided, five-step flow.
 //!
-//! Layout (1200 x 860): header with key / scale / genre, the chord palette and the idea panel
-//! (next-chord suggestions, melody matching, progression templates), the sequence of chords, a
-//! piano roll for the melody with the harmony drawn underneath it, and panels for styles,
-//! playback routing and MIDI export / import.
+//! 1 Start (genre, key, mood, a first progression) -> 2 Chords -> 3 Melody -> 4 Sound -> 5 Export.
+//! One job per screen, big type, plain words. The header shows where you are and always has Play.
 
-mod bottom;
-mod ideas;
-mod palette;
-mod roll;
-mod sequence;
+mod chords;
+mod export;
+mod melody;
+mod sound;
+mod start;
 pub mod widgets;
 
 use crate::midifile::MidiIn;
@@ -28,7 +26,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use widgets::*;
 
-/// Which chord set the palette shows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    Start,
+    Chords,
+    Melody,
+    Sound,
+    Export,
+}
+
+const STEPS: [(Step, &str); 5] = [(Step::Start, "Start"), (Step::Chords, "Chords"), (Step::Melody, "Melody"), (Step::Sound, "Sound"), (Step::Export, "Export")];
+
+/// Which chord set the chord picker shows.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Source {
     Home,
@@ -38,32 +47,27 @@ pub enum Source {
     Mode(usize),
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum RightTab {
-    Next,
-    Match,
-    Progressions,
-}
-
 pub struct State {
+    pub step: Step,
     pub sel: Option<Sel>,
     /// The section new chords are added to.
     pub cur_section: usize,
     pub source: Source,
-    pub tab: RightTab,
+    /// How rich the chords in the picker are.
+    pub richness: Ext,
     pub seed: u32,
     /// Snap of the piano roll in beats.
     pub snap: usize,
     pub zoom: Option<f32>,
-    pub roll_scroll: f32,
-    pub roll: roll::RollState,
+    pub roll_x: f32,
+    pub roll_y: f32,
+    pub roll_y_init: bool,
+    /// Show every semitone in the piano roll instead of only the notes of the key.
+    pub show_all: bool,
+    pub roll: melody::RollState,
     pub drag: Option<Chord>,
     pub audition: Option<(Id, Vec<u8>)>,
-    pub template: usize,
-    pub list_scroll: [f32; 3],
     pub import: Option<MidiIn>,
-    pub import_name: String,
-    pub transpose_with_key: bool,
     pub message: Option<(String, f64)>,
     /// The melody before the last generate / clear / fix, for UNDO.
     pub undo_melody: Option<Vec<Note>>,
@@ -74,22 +78,22 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            step: Step::Start,
             sel: None,
             cur_section: 0,
             source: Source::Home,
-            tab: RightTab::Next,
+            richness: Ext::Triad,
             seed: 1,
             snap: 1,
             zoom: None,
-            roll_scroll: 0.0,
+            roll_x: 0.0,
+            roll_y: 0.0,
+            roll_y_init: false,
+            show_all: false,
             roll: Default::default(),
             drag: None,
             audition: None,
-            template: 0,
-            list_scroll: [0.0; 3],
             import: None,
-            import_name: String::new(),
-            transpose_with_key: true,
             message: None,
             undo_melody: None,
             drum_keys: true,
@@ -97,7 +101,7 @@ impl Default for State {
     }
 }
 
-/// Everything a panel needs for one frame.
+/// Everything a step needs for one frame.
 pub struct Cx<'a> {
     pub p: &'a ChordwaveParams,
     pub shared: &'a Arc<Shared>,
@@ -111,7 +115,7 @@ pub struct Cx<'a> {
     pub time: f64,
 }
 
-pub const SNAPS: [(&str, f32); 3] = [("1/4", 1.0), ("1/8", 0.5), ("1/16", 0.25)];
+pub const SNAPS: [(&str, f32); 3] = [("1/4 beat", 1.0), ("1/8 beat", 0.5), ("1/16 beat", 0.25)];
 
 pub fn set<P: Param>(setter: &ParamSetter, p: &P, value: P::Plain) {
     setter.begin_set_parameter(p);
@@ -164,30 +168,57 @@ impl<'a> Cx<'a> {
         }
     }
 
-    /// Hold a single note for the piano roll preview (part 2 = melody).
+    /// Hold a single note for the piano roll preview (channel 3 = melody).
     pub fn note_on(&self, pitch: u8) {
         self.shared.pads.push(0x92, pitch, 100);
     }
     pub fn note_off(&self, pitch: u8) {
         self.shared.pads.push(0x82, pitch, 0);
     }
-}
 
-impl State {
-    /// Press = listen while held; a drag from the chip starts moving the chord; returns true on double-click.
-    pub fn chip(&mut self, cx: &Cx, resp: &Response, chord: Chord) -> bool {
-        let down = resp.is_pointer_button_down_on();
-        match &self.audition {
-            None if down => cx.start_audition(self, resp.id, &chord),
-            Some((id, _)) if !down && *id == resp.id => cx.stop_audition(self),
-            _ => {}
+    /// Choose a genre: it also sets the chord and bass style and the tempo that suit it.
+    pub fn apply_genre(&self, index: usize) {
+        let g = Genre::from_index(index);
+        set(self.setter, &self.p.genre, index as i32);
+        let (cs, bs) = g.default_styles();
+        set(self.setter, &self.p.chord_style, cs.index() as i32);
+        set(self.setter, &self.p.bass_style, bs.index() as i32);
+        set(self.setter, &self.p.bpm, g.tempo());
+    }
+
+    /// Change the key; the whole sketch moves with it.
+    pub fn change_key(&self, new_key: u8) {
+        let diff = (new_key as i32 - self.key as i32 + 18).rem_euclid(12) - 6;
+        if diff != 0 {
+            self.p.project.edit(|pr| {
+                for s in &mut pr.sections {
+                    for it in &mut s.items {
+                        it.chord.root = (it.chord.root as i32 + diff).rem_euclid(12) as u8;
+                        it.chord.bass = it.chord.bass.map(|b| (b as i32 + diff).rem_euclid(12) as u8);
+                    }
+                }
+                for n in &mut pr.melody {
+                    n.pitch = (n.pitch as i32 + diff).clamp(0, 127) as u8;
+                }
+            });
         }
-        if resp.drag_started() {
-            self.drag = Some(chord);
+        set(self.setter, &self.p.key, new_key as i32);
+    }
+
+    /// Replace the progression with a template, written in the current key.
+    pub fn apply_template(&self, st: &mut State, tpl: &Template) {
+        if tpl.scale != self.scale {
+            set(self.setter, &self.p.scale, tpl.scale.index() as i32);
         }
-        resp.double_clicked()
+        let key = self.key;
+        self.p.project.edit(|pr| pr.sections = vec![tpl.section(key, "A")]);
+        st.cur_section = 0;
+        st.sel = None;
     }
 }
+
+const W: f32 = 1120.0;
+const MARGIN: f32 = 32.0;
 
 pub fn create(params: Arc<ChordwaveParams>, shared: Arc<Shared>) -> Option<Box<dyn Editor>> {
     create_egui_editor(
@@ -220,17 +251,22 @@ pub fn create(params: Arc<ChordwaveParams>, shared: Arc<Shared>) -> Option<Box<d
                     }
                 }
                 st.cur_section = st.cur_section.min(cx.project.sections.len().saturating_sub(1));
-                bottom::take_messages(&cx, st);
+                export::take_messages(&cx, st);
 
-                header(ui, &cx, st, r(0.0, 0.0, 1200.0, 56.0));
-                palette::draw(ui, &cx, st, r(12.0, 62.0, 640.0, 250.0));
-                ideas::draw(ui, &cx, st, r(660.0, 62.0, 528.0, 250.0));
-                let seq_rect = r(12.0, 318.0, 1176.0, 132.0);
-                sequence::draw(ui, &cx, st, seq_rect);
-                roll::draw(ui, &cx, st, r(12.0, 456.0, 1176.0, 244.0));
-                bottom::draw(ui, &cx, st, r(12.0, 706.0, 1176.0, 146.0));
-
-                sequence::finish_drag(ui, &cx, st, seq_rect);
+                header(ui, &cx, st, r(0.0, 0.0, W, 72.0));
+                let area = r(MARGIN, 88.0, W - 2.0 * MARGIN, 624.0);
+                match st.step {
+                    Step::Start => start::draw(ui, &cx, st, area),
+                    Step::Chords => chords::draw(ui, &cx, st, area),
+                    Step::Melody => melody::draw(ui, &cx, st, area),
+                    Step::Sound => sound::draw(ui, &cx, st, area),
+                    Step::Export => export::draw(ui, &cx, st, area),
+                }
+                footer(ui, st, r(MARGIN, 728.0, W - 2.0 * MARGIN, 48.0));
+                if st.step == Step::Chords {
+                    chords::finish_drag(ui, &cx, st);
+                }
+                export::import_overlay(ui, &cx, st, r(0.0, 0.0, W, 800.0));
             });
         },
     )
@@ -238,91 +274,73 @@ pub fn create(params: Arc<ChordwaveParams>, shared: Arc<Shared>) -> Option<Box<d
 
 fn header(ui: &mut Ui, cx: &Cx, st: &mut State, rect: Rect) {
     let (l, t) = (rect.left(), rect.top());
-    let painter = ui.painter();
-    painter.text(pos2(l + 18.0, t + 25.0), Align2::LEFT_CENTER, "CHORDWAVE", FontId::proportional(25.0), TEXT);
-    spaced_text(painter, pos2(l + 19.0, t + 46.0), "CHORD & MELODY SKETCHER", 8.5, ACCENT, 1.6);
+    ui.painter().text(pos2(l + MARGIN, t + 36.0), Align2::LEFT_CENTER, "Chordwave", FontId::proportional(22.0), TEXT);
+    ui.painter().circle_filled(pos2(l + MARGIN + 112.0, t + 33.0), 3.5, ACCENT);
 
-    // Key, scale and genre.
-    caption(ui, pos2(l + 262.0, t + 8.0), "KEY");
-    caption(ui, pos2(l + 336.0, t + 8.0), "SCALE");
-    caption(ui, pos2(l + 506.0, t + 8.0), "GENRE");
-    let key_names: Vec<String> = (0..12u8).map(|k| pc_name(k, use_flats(k, cx.scale)).to_string()).collect();
-    let current_key = pc_name(cx.key, cx.flats);
-    if let Some(i) = dd(ui, Rect::from_min_size(pos2(l + 254.0, t + 18.0), vec2(70.0, 26.0)), "key", current_key, &key_names, ACCENT,
-        "The tonic of your song. Changing it moves the whole sketch when TRANSPOSE is on.") {
-        if st.transpose_with_key {
-            let diff = (i as i32 - cx.key as i32 + 18).rem_euclid(12) - 6;
-            transpose(cx, diff);
+    // The five steps.
+    let pill_w = 116.0;
+    let gap = 6.0;
+    let total = 5.0 * pill_w + 4.0 * gap;
+    let x0 = l + 200.0;
+    let _ = total;
+    for (i, (step, name)) in STEPS.iter().enumerate() {
+        let r = Rect::from_min_size(pos2(x0 + i as f32 * (pill_w + gap), t + 18.0), vec2(pill_w, 36.0));
+        let resp = ui.interact(r, Id::new(("step", i)), Sense::click());
+        let on = st.step == *step;
+        let painter = ui.painter();
+        painter.rect_filled(r, 18.0, if on { ACCENT } else if resp.hovered() { RAISED_HOVER } else { RAISED });
+        let c = pos2(r.left() + 20.0, r.center().y);
+        painter.circle_filled(c, 10.0, if on { Color32::from_black_alpha(60) } else { BG });
+        painter.text(c, Align2::CENTER_CENTER, format!("{}", i + 1), FontId::proportional(12.0), if on { Color32::WHITE } else { DIM });
+        painter.text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(14.0), if on { Color32::WHITE } else { Color32::from_rgb(200, 205, 215) });
+        if resp.clicked() {
+            cx.stop_audition(st);
+            st.step = *step;
         }
-        set(cx.setter, &cx.p.key, i as i32);
-    }
-    let scale_names: Vec<&str> = SCALES.iter().map(|s| s.name).collect();
-    let tip = format!("{}: {}", cx.scale.name(), cx.scale.def().blurb);
-    if let Some(i) = dd(ui, Rect::from_min_size(pos2(l + 330.0, t + 18.0), vec2(160.0, 26.0)), "scale", cx.scale.name(), &scale_names, ACCENT, &tip) {
-        set(cx.setter, &cx.p.scale, i as i32);
-    }
-    let genre_names: Vec<&str> = GENRES.iter().map(|g| g.name()).collect();
-    if let Some(i) = dd(ui, Rect::from_min_size(pos2(l + 498.0, t + 18.0), vec2(140.0, 26.0)), "genre", cx.genre.name(), &genre_names, ACCENT,
-        "Biases suggestions, templates and generated parts. It never restricts what you can use.") {
-        let g = Genre::from_index(i);
-        set(cx.setter, &cx.p.genre, i as i32);
-        let (cs, bs) = g.default_styles();
-        set(cx.setter, &cx.p.chord_style, cs.index() as i32);
-        set(cx.setter, &cx.p.bass_style, bs.index() as i32);
-        set(cx.setter, &cx.p.bpm, g.tempo());
-    }
-    if pill(ui, Rect::from_min_size(pos2(l + 644.0, t + 22.0), vec2(74.0, 18.0)), "transpose", "TRANSPOSE", st.transpose_with_key, AQUA,
-        "On: changing the key moves your chords and melody with it.\nOff: the notes stay, only the key changes (the palette re-labels them).") {
-        st.transpose_with_key = !st.transpose_with_key;
     }
 
-    // Tempo, transport, loop.
-    knob(ui, cx.setter, &cx.p.bpm, pos2(l + 760.0, t + 27.0), Kn::S, "TEMPO", ACCENT,
-        "Tempo of the standalone app and of PLAY when the host does not give one. In a DAW, the host tempo is used while it plays.");
+    // Tempo and transport, always within reach.
+    let right = rect.right() - MARGIN;
     let playing = cx.shared.play.load(Ordering::Relaxed);
-    if button(ui, Rect::from_min_size(pos2(l + 800.0, t + 16.0), vec2(64.0, 28.0)), "play", if playing { "STOP" } else { "PLAY" },
-        if playing { ACCENT } else { AQUA }, "Listen to the sketch on the built-in clock. In a DAW it also follows the host transport.") {
+    if big_button(ui, Rect::from_min_size(pos2(right - 104.0, t + 16.0), vec2(104.0, 40.0)), "play", if playing { "Stop" } else { "Play" },
+        if playing { Btn::Normal } else { Btn::Primary }, "Listen to your sketch. In a DAW it also follows the host's play button.") {
         cx.shared.play.store(!playing, Ordering::Relaxed);
     }
-    toggle(ui, cx.setter, &cx.p.repeat, Rect::from_min_size(pos2(l + 872.0, t + 22.0), vec2(48.0, 18.0)), "LOOP", AQUA,
-        "Repeat the sketch endlessly. Off: play it once, then stop.");
-
-    // Scale notes.
-    // In scale order starting from the tonic (A B C D E F G), not in pitch-class order.
-    let notes: Vec<&str> = cx.scale.intervals().iter().map(|i| pc_name((cx.key + i) % 12, cx.flats)).collect();
-    spaced_text(ui.painter(), pos2(l + 940.0, t + 22.0), "SCALE NOTES", 8.0, FAINT, 1.2);
-    ui.painter().text(pos2(l + 940.0, t + 38.0), Align2::LEFT_CENTER, notes.join("  "), FontId::proportional(11.0), AQUA);
-
-    knob(ui, cx.setter, &cx.p.gain, pos2(l + 1112.0, t + 27.0), Kn::S, "VOLUME", ACCENT, "Output level of the built-in sound.");
-    meter(ui, Rect::from_min_size(pos2(l + 1136.0, t + 21.0), vec2(56.0, 10.0)), cx.shared.meter.load(Ordering::Relaxed), ACCENT);
+    let bpm = cx.p.bpm.value();
+    let bx = right - 104.0 - 16.0 - 132.0;
+    if big_button(ui, Rect::from_min_size(pos2(bx, t + 20.0), vec2(30.0, 32.0)), "bpm-dn", "−", Btn::Quiet, "Slower") {
+        set(cx.setter, &cx.p.bpm, (bpm - 1.0).max(50.0));
+    }
+    label(ui, pos2(bx + 66.0, t + 36.0), Align2::CENTER_CENTER, format!("{:.0} BPM", bpm), 14.0, TEXT);
+    if big_button(ui, Rect::from_min_size(pos2(bx + 102.0, t + 20.0), vec2(30.0, 32.0)), "bpm-up", "+", Btn::Quiet, "Faster") {
+        set(cx.setter, &cx.p.bpm, (bpm + 1.0).min(220.0));
+    }
+    ui.painter().line_segment([pos2(l, t + 71.5), pos2(rect.right(), t + 71.5)], st_line());
 }
 
-/// Move every chord and melody note by `semitones`.
-fn transpose(cx: &Cx, semitones: i32) {
-    if semitones == 0 {
-        return;
+fn st_line() -> egui::Stroke {
+    plugin_common::ui::st(1.0, LINE)
+}
+
+fn footer(ui: &mut Ui, st: &mut State, rect: Rect) {
+    let i = STEPS.iter().position(|(s, _)| *s == st.step).unwrap_or(0);
+    if i > 0 && big_button(ui, Rect::from_min_size(rect.left_top() + vec2(0.0, 4.0), vec2(150.0, 42.0)), "back", &format!("Back: {}", STEPS[i - 1].1), Btn::Normal, "") {
+        st.step = STEPS[i - 1].0;
     }
-    cx.p.project.edit(|pr| {
-        for s in &mut pr.sections {
-            for it in &mut s.items {
-                it.chord.root = (it.chord.root as i32 + semitones).rem_euclid(12) as u8;
-                it.chord.bass = it.chord.bass.map(|b| (b as i32 + semitones).rem_euclid(12) as u8);
-            }
-        }
-        for n in &mut pr.melody {
-            n.pitch = (n.pitch as i32 + semitones).clamp(0, 127) as u8;
-        }
-    });
+    if i + 1 < STEPS.len() && big_button(ui, Rect::from_min_size(rect.right_top() + vec2(-190.0, 4.0), vec2(190.0, 42.0)), "next", &format!("Next: {}", STEPS[i + 1].1), Btn::Primary, "") {
+        st.step = STEPS[i + 1].0;
+    }
+    label(ui, pos2(rect.center().x, rect.center().y), Align2::CENTER_CENTER, format!("Step {} of {}", i + 1, STEPS.len()), 12.0, FAINT);
 }
 
 /// Draw a drag ghost under the pointer.
 pub fn ghost(ui: &Ui, chord: &Chord, flats: bool) {
     if let Some(pos) = ui.input(|i| i.pointer.hover_pos()) {
-        let rect = Rect::from_center_size(pos + vec2(14.0, 10.0), vec2(70.0, 26.0));
+        let rect = Rect::from_center_size(pos + vec2(18.0, 12.0), vec2(84.0, 34.0));
         let col = kind_color(chord.kind());
         let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, Id::new("ghost")));
-        painter.rect_filled(rect, 5.0, col.gamma_multiply(0.5));
-        painter.rect_stroke(rect, 5.0, st(1.5, col), egui::StrokeKind::Inside);
-        painter.text(rect.center(), Align2::CENTER_CENTER, chord.name(flats), FontId::proportional(12.5), Color32::WHITE);
+        painter.rect_filled(rect, 8.0, col.gamma_multiply(0.55));
+        painter.rect_stroke(rect, 8.0, st(1.5, col), StrokeKind::Inside);
+        painter.text(rect.center(), Align2::CENTER_CENTER, chord.name(flats), FontId::proportional(15.0), Color32::WHITE);
     }
 }
